@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import StoreProvider from "@/state/redux";
+import { AuthSync } from "@/components/auth-sync";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,13 +27,16 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider>
-      <html lang="en">
-        <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-x-hidden`}
-        >
-          {children}
-        </body>
-      </html>
+      <StoreProvider>
+        <AuthSync />
+        <html lang="en">
+          <body
+            className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-x-hidden`}
+          >
+            {children}
+          </body>
+        </html>
+      </StoreProvider>
     </ClerkProvider>
   );
 }

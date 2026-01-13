@@ -12,6 +12,13 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
+  // Check if user is banned
+  const isBanned = (user.publicMetadata?.banned as boolean) || false;
+
+  if (isBanned) {
+    redirect("/banned");
+  }
+
   // Check if user is admin, redirect to admin dashboard
   const role = (user.publicMetadata?.role as string) ||
                (user.unsafeMetadata?.role as string) ||

@@ -44,93 +44,24 @@ import {
   Mail,
   Phone,
   Calendar,
+  MoreHorizontal,
 } from "lucide-react"
+import { useGetUsersQuery } from "@/state/api"
+import { UserActions } from "@/components/admin/user-actions"
 
 interface User {
   id: string
   name: string
   email: string
-  phone?: string
+  phone?: string | null
   status: "active" | "suspended" | "pending"
+  role: "user" | "admin"
   totalOrders: number
-  totalVolume: string
+  totalVolume: number
   joinedAt: string
   lastActive: string
   verificationStatus: "verified" | "unverified" | "pending"
 }
-
-const initialUsers: User[] = [
-  {
-    id: "USR-001",
-    name: "John Doe",
-    email: "john@example.com",
-    phone: "+1 234-567-8900",
-    status: "active",
-    totalOrders: 45,
-    totalVolume: "$125,450",
-    joinedAt: "2024-01-15",
-    lastActive: "2024-12-23 10:30:00",
-    verificationStatus: "verified",
-  },
-  {
-    id: "USR-002",
-    name: "Sarah Smith",
-    email: "sarah@example.com",
-    phone: "+1 234-567-8901",
-    status: "active",
-    totalOrders: 32,
-    totalVolume: "$98,320",
-    joinedAt: "2024-02-20",
-    lastActive: "2024-12-23 09:15:00",
-    verificationStatus: "verified",
-  },
-  {
-    id: "USR-003",
-    name: "Mike Johnson",
-    email: "mike@example.com",
-    status: "active",
-    totalOrders: 67,
-    totalVolume: "$245,890",
-    joinedAt: "2023-11-10",
-    lastActive: "2024-12-22 14:20:00",
-    verificationStatus: "verified",
-  },
-  {
-    id: "USR-004",
-    name: "Lisa Anderson",
-    email: "lisa@example.com",
-    phone: "+1 234-567-8903",
-    status: "pending",
-    totalOrders: 2,
-    totalVolume: "$8,500",
-    joinedAt: "2024-12-20",
-    lastActive: "2024-12-23 08:00:00",
-    verificationStatus: "pending",
-  },
-  {
-    id: "USR-005",
-    name: "Robert Brown",
-    email: "robert@example.com",
-    status: "suspended",
-    totalOrders: 12,
-    totalVolume: "$34,200",
-    joinedAt: "2024-08-05",
-    lastActive: "2024-12-15 16:45:00",
-    verificationStatus: "verified",
-  },
-  {
-    id: "USR-006",
-    name: "Emma Wilson",
-    email: "emma@example.com",
-    phone: "+1 234-567-8905",
-    status: "active",
-    totalOrders: 28,
-    totalVolume: "$72,180",
-    joinedAt: "2024-03-12",
-    lastActive: "2024-12-23 11:00:00",
-    verificationStatus: "verified",
-  },
-]
 
 const statusConfig = {
   active: {
@@ -157,11 +88,20 @@ const verificationConfig = {
 }
 
 export default function UsersManagement() {
-  const [users, setUsers] = useState<User[]>(initialUsers)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+
+  // Fetch users from API
+  const { data, isLoading, error } = useGetUsersQuery({
+    page: 1,
+    limit: 100,
+    search: searchQuery,
+    status: statusFilter === "all" ? undefined : statusFilter,
+  })
+
+  const users = data?.data || []
 
   const getInitials = (name: string) => {
     return name
@@ -219,9 +159,10 @@ export default function UsersManagement() {
       {
         accessorKey: "totalVolume",
         header: "Total Volume",
-        cell: ({ row }) => (
-          <span className="font-medium">{row.getValue("totalVolume")}</span>
-        ),
+        cell: ({ row }) => {
+          const volume = row.getValue("totalVolume") as number
+          return <span className="font-medium">${volume.toLocaleString()}</span>
+        },
       },
       {
         accessorKey: "verificationStatus",
@@ -278,28 +219,12 @@ export default function UsersManagement() {
               <Eye className="size-4 mr-1" />
               View
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => toggleUserStatus(row.original.id)}
-              className={
-                row.original.status === "active"
-                  ? "text-red-600"
-                  : "text-green-600"
-              }
-            >
-              {row.original.status === "active" ? (
-                <>
-                  <Ban className="size-4 mr-1" />
-                  Suspend
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="size-4 mr-1" />
-                  Activate
-                </>
-              )}
-            </Button>
+            <UserActions
+              userId={row.original.id}
+              userEmail={row.original.email}
+              status={row.original.status}
+              role={row.original.role}
+            />
           </div>
         ),
       },
@@ -332,21 +257,6 @@ export default function UsersManagement() {
   const handleViewDetails = (user: User) => {
     setSelectedUser(user)
     setIsDetailsOpen(true)
-  }
-
-  const toggleUserStatus = (userId: string) => {
-    setUsers(
-      users.map((user) => {
-        if (user.id === userId) {
-          const newStatus = user.status === "active" ? "suspended" : "active"
-          return { ...user, status: newStatus }
-        }
-        return user
-      })
-    )
-    if (selectedUser && selectedUser.id === userId) {
-      setIsDetailsOpen(false)
-    }
   }
 
   const stats = {
@@ -526,7 +436,7 @@ export default function UsersManagement() {
                       Total Volume
                     </div>
                     <div className="text-2xl font-bold">
-                      {selectedUser.totalVolume}
+                      ${selectedUser.totalVolume.toLocaleString()}
                     </div>
                   </div>
                 </div>
@@ -559,22 +469,6 @@ export default function UsersManagement() {
                   <Label className="text-muted-foreground">Last Active</Label>
                   <div>{selectedUser.lastActive}</div>
                 </div>
-              </div>
-
-              {/* Actions */}
-              <div className="border-t pt-4">
-                <Button
-                  onClick={() => toggleUserStatus(selectedUser.id)}
-                  className={`w-full ${
-                    selectedUser.status === "active"
-                      ? "bg-red-600 hover:bg-red-700"
-                      : "bg-green-600 hover:bg-green-700"
-                  }`}
-                >
-                  {selectedUser.status === "active"
-                    ? "Suspend User"
-                    : "Activate User"}
-                </Button>
               </div>
             </div>
           )}
