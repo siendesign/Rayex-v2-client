@@ -493,21 +493,9 @@ export default function PaymentMethodsManagement() {
                   }`}
                 >
                   {method.type === "bank" ? (
-                    <Building2
-                      className={`size-6 ${
-                        method.type === "bank"
-                          ? "text-blue-600"
-                          : "text-purple-600"
-                      }`}
-                    />
+                    <Building2 className="size-6 text-blue-600" />
                   ) : (
-                    <Bitcoin
-                      className={`size-6 ${
-                        method.type === "bank"
-                          ? "text-blue-600"
-                          : "text-purple-600"
-                      }`}
-                    />
+                    <Bitcoin className="size-6 text-purple-600" />
                   )}
                 </div>
                 <div>
