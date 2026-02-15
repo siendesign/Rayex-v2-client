@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { ArrowRightLeft } from "lucide-react"
+import { useState, useEffect } from "react"
+import { ArrowRightLeft, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -12,44 +12,83 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-
-const currencies = [
-  { code: "USD", name: "US Dollar", flag: "🇺🇸" },
-  { code: "EUR", name: "Euro", flag: "🇪🇺" },
-  { code: "GBP", name: "British Pound", flag: "🇬🇧" },
-  { code: "JPY", name: "Japanese Yen", flag: "🇯🇵" },
-  { code: "AUD", name: "Australian Dollar", flag: "🇦🇺" },
-  { code: "CAD", name: "Canadian Dollar", flag: "🇨🇦" },
-]
-
-const exchangeRates: { [key: string]: number } = {
-  "USD-EUR": 0.92,
-  "USD-GBP": 0.79,
-  "USD-JPY": 149.5,
-  "USD-AUD": 1.52,
-  "USD-CAD": 1.36,
-  "EUR-USD": 1.09,
-  "GBP-USD": 1.27,
-  "JPY-USD": 0.0067,
-  "AUD-USD": 0.66,
-  "CAD-USD": 0.74,
-}
+import { useGetCurrenciesQuery, useGetExchangeRatesQuery } from "@/state/api"
+import Image from "next/image"
+import { useRouter } from "next/navigation"
 
 export function ExchangeCalculator() {
+  const router = useRouter()
+  const { data: currenciesData, isLoading: currenciesLoading } = useGetCurrenciesQuery()
+  const { data: ratesData, isLoading: ratesLoading } = useGetExchangeRatesQuery()
+
   const [fromCurrency, setFromCurrency] = useState("USD")
   const [toCurrency, setToCurrency] = useState("EUR")
   const [amount, setAmount] = useState("1000")
 
+  const currencies = currenciesData?.data || []
+  const exchangeRates = ratesData?.data || []
+
+  // Get currencies that have at least one active exchange rate as the from-currency
+  const activeFromCurrencyCodes = Array.from(new Set(exchangeRates.filter(r => r.active).map(r => r.fromCurrency.code)))
+  const validFromCurrencies = currencies.filter(c => activeFromCurrencyCodes.includes(c.code))
+
+  const validToCurrencyCodes = exchangeRates
+    .filter((r) => r.fromCurrency.code === fromCurrency && r.active)
+    .map((r) => r.toCurrency.code)
+
+  const validToCurrencies = currencies.filter((c) =>
+    validToCurrencyCodes.includes(c.code)
+  )
+
+  const toCurrencyObj = currencies.find(c => c.code === toCurrency)
+
+  // Auto-switch toCurrency if it's no longer valid
+  useEffect(() => {
+    if (validToCurrencyCodes.length > 0 && !validToCurrencyCodes.includes(toCurrency)) {
+      setToCurrency(validToCurrencyCodes[0])
+    }
+  }, [fromCurrency, validToCurrencyCodes, toCurrency])
+
   const getExchangeRate = () => {
-    const key = `${fromCurrency}-${toCurrency}`
-    return exchangeRates[key] || 1
+    const rateItem = exchangeRates.find(
+      (r) => r.fromCurrency.code === fromCurrency && r.toCurrency.code === toCurrency
+    )
+    return rateItem ? rateItem.sellRate : 1 // Using sellRate for calculator
   }
 
-  const convertedAmount = (parseFloat(amount) || 0) * getExchangeRate()
+  const convertedAmount = (parseFloat(amount) || 0) / getExchangeRate()
 
   const swapCurrencies = () => {
-    setFromCurrency(toCurrency)
-    setToCurrency(fromCurrency)
+    // Only swap if the reverse pair is also valid
+    const reversePairExists = exchangeRates.some(
+      (r) => r.fromCurrency.code === toCurrency && r.toCurrency.code === fromCurrency && r.active
+    )
+    if (reversePairExists) {
+      setFromCurrency(toCurrency)
+      setToCurrency(fromCurrency)
+    }
+  }
+
+  const handleContinue = () => {
+    const params = new URLSearchParams({
+      from: fromCurrency,
+      to: toCurrency,
+      amount: amount
+    })
+    router.push(`/create-order?${params.toString()}`)
+  }
+
+  const isLoading = currenciesLoading || ratesLoading
+
+  if (isLoading) {
+    return (
+      <section className="py-20 px-4 md:px-8 bg-muted/30">
+        <div className="max-w-4xl mx-auto flex flex-col items-center justify-center min-h-[400px]">
+          <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground">Loading exchange rates...</p>
+        </div>
+      </section>
+    )
   }
 
   return (
@@ -78,15 +117,26 @@ export function ExchangeCalculator() {
                   placeholder="0.00"
                 />
                 <Select value={fromCurrency} onValueChange={setFromCurrency}>
-                  <SelectTrigger className="w-40 h-14">
+                  <SelectTrigger className="w-44 h-14">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {currencies.map((currency) => (
-                      <SelectItem key={currency.code} value={currency.code}>
+                    {validFromCurrencies.map((currency) => (
+                      <SelectItem key={currency.id} value={currency.code}>
                         <span className="flex items-center gap-2">
-                          <span>{currency.flag}</span>
-                          <span>{currency.code}</span>
+                          {currency.flagUrl ? (
+                            <div className="relative w-6 h-4 overflow-hidden rounded-sm border border-muted-foreground/20">
+                              <Image
+                                src={currency.flagUrl}
+                                alt={currency.name}
+                                fill
+                                className="object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <span className="text-lg">{currency.flag}</span>
+                          )}
+                          <span className="font-medium">{currency.code}</span>
                         </span>
                       </SelectItem>
                     ))}
@@ -99,8 +149,9 @@ export function ExchangeCalculator() {
             <div className="flex justify-center">
               <button
                 onClick={swapCurrencies}
-                className="p-3 rounded-full bg-muted hover:bg-muted/80 transition-colors"
+                className="p-3 rounded-full bg-muted hover:bg-muted/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Swap currencies"
+                disabled={!exchangeRates.some(r => r.fromCurrency.code === toCurrency && r.toCurrency.code === fromCurrency && r.active)}
               >
                 <ArrowRightLeft className="w-5 h-5" />
               </button>
@@ -112,20 +163,34 @@ export function ExchangeCalculator() {
               <div className="flex gap-3">
                 <Input
                   type="text"
-                  value={convertedAmount.toFixed(2)}
+                  value={convertedAmount.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  })}
                   readOnly
                   className="flex-1 text-2xl h-14 bg-muted"
                 />
                 <Select value={toCurrency} onValueChange={setToCurrency}>
-                  <SelectTrigger className="w-40 h-14">
+                  <SelectTrigger className="w-44 h-14">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {currencies.map((currency) => (
-                      <SelectItem key={currency.code} value={currency.code}>
+                    {validToCurrencies.map((currency) => (
+                      <SelectItem key={currency.id} value={currency.code}>
                         <span className="flex items-center gap-2">
-                          <span>{currency.flag}</span>
-                          <span>{currency.code}</span>
+                          {currency.flagUrl ? (
+                            <div className="relative w-6 h-4 overflow-hidden rounded-sm border border-muted-foreground/20">
+                              <Image
+                                src={currency.flagUrl}
+                                alt={currency.name}
+                                fill
+                                className="object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <span className="text-lg">{currency.flag}</span>
+                          )}
+                          <span className="font-medium">{currency.code}</span>
                         </span>
                       </SelectItem>
                     ))}
@@ -139,16 +204,12 @@ export function ExchangeCalculator() {
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">Exchange rate</span>
                 <span className="font-medium">
-                  1 {fromCurrency} = {getExchangeRate().toFixed(4)} {toCurrency}
+                  1 {toCurrency} = {getExchangeRate().toFixed(4)} {fromCurrency}
                 </span>
-              </div>
-              <div className="flex justify-between items-center text-sm mt-2">
-                <span className="text-muted-foreground">Fee</span>
-                <span className="font-medium text-green-600">$0.00</span>
               </div>
             </div>
 
-            <Button className="w-full h-12">Continue</Button>
+            <Button onClick={handleContinue} className="w-full h-12">Continue</Button>
           </CardContent>
         </Card>
       </div>

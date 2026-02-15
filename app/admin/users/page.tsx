@@ -46,8 +46,10 @@ import {
   Calendar,
   MoreHorizontal,
 } from "lucide-react"
-import { useGetUsersQuery } from "@/state/api"
+import { useGetUsersQuery, api } from "@/state/api"
 import { UserActions } from "@/components/admin/user-actions"
+import { useSSE } from "@/hooks/useSSE"
+import { useAppDispatch } from "@/state/redux"
 
 interface User {
   id: string
@@ -88,18 +90,32 @@ const verificationConfig = {
 }
 
 export default function UsersManagement() {
+  const dispatch = useAppDispatch()
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
 
   // Fetch users from API
-  const { data, isLoading, error } = useGetUsersQuery({
+  const { data, isLoading, error, refetch } = useGetUsersQuery({
     page: 1,
     limit: 100,
     search: searchQuery,
     status: statusFilter === "all" ? undefined : statusFilter,
   })
+
+  // Real-time updates via SSE
+  const sseUrl = `${process.env.NEXT_PUBLIC_API_URL}/realtime/sse?role=admin`;
+
+  useSSE({
+    url: sseUrl,
+    events: {
+      user_updated: (user: any) => {
+        console.log('👤 SSE: User updated, refreshing users list...', user.id)
+        refetch() // Easiest way to keep stats (top cards) and list in sync
+      }
+    }
+  });
 
   const users = data?.data || []
 
@@ -330,48 +346,48 @@ export default function UsersManagement() {
       <div className="rounded-md border">
         <div className="overflow-x-auto">
           <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <TableHead key={header.id}>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
                           header.column.columnDef.header,
                           header.getContext()
                         )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
+                    </TableHead>
                   ))}
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  No results.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow key={row.id}>
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={columns.length}
+                    className="h-24 text-center"
+                  >
+                    No results.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
       </div>
 
@@ -450,9 +466,8 @@ export default function UsersManagement() {
                     <CheckCircle2 className="size-5 text-green-600" />
                   )}
                   <span
-                    className={`font-medium ${
-                      verificationConfig[selectedUser.verificationStatus].color
-                    }`}
+                    className={`font-medium ${verificationConfig[selectedUser.verificationStatus].color
+                      }`}
                   >
                     {verificationConfig[selectedUser.verificationStatus].label}
                   </span>

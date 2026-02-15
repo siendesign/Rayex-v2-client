@@ -4,13 +4,8 @@ import { useState, useMemo } from "react"
 import {
   useReactTable,
   getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
   flexRender,
   type ColumnDef,
-  type ColumnFiltersState,
-  type SortingState,
 } from "@tanstack/react-table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,9 +42,16 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
+  Loader2,
+  AlertCircle,
 } from "lucide-react"
+import { useGetOrdersQuery, useUpdateOrderStatusMutation, api } from "@/state/api"
+import { useEffect } from "react"
+import { useAppDispatch } from "@/state/redux"
+import { useSSE } from "@/hooks/useSSE"
 
-interface Order {
+// Local interface for UI mapping
+interface OrderUI {
   id: string
   userId: string
   userName: string
@@ -57,13 +59,13 @@ interface Order {
   from: { currency: string; amount: string; flag: string }
   to: { currency: string; amount: string; flag: string }
   status:
-    | "pending_payment"
-    | "payment_received"
-    | "processing"
-    | "completed"
-    | "failed"
-    | "cancelled"
-  paymentMethod: "bank" | "crypto"
+  | "pending_payment"
+  | "payment_received"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  paymentMethod: string
   recipientName: string
   recipientBank: string
   recipientAccount: string
@@ -73,116 +75,6 @@ interface Order {
   fee: string
   notes?: string
 }
-
-const initialOrders: Order[] = [
-  {
-    id: "ORD-2024-045",
-    userId: "USR-001",
-    userName: "John Doe",
-    userEmail: "john@example.com",
-    from: { currency: "USD", amount: "5,000.00", flag: "🇺🇸" },
-    to: { currency: "EUR", amount: "4,600.00", flag: "🇪🇺" },
-    status: "pending_payment",
-    paymentMethod: "bank",
-    recipientName: "Maria Garcia",
-    recipientBank: "Deutsche Bank",
-    recipientAccount: "DE89 3704 0044 0532 0130 00",
-    createdAt: "2024-12-23 10:30:00",
-    updatedAt: "2024-12-23 10:30:00",
-    rate: "0.92",
-    fee: "25.00",
-  },
-  {
-    id: "ORD-2024-044",
-    userId: "USR-002",
-    userName: "Sarah Smith",
-    userEmail: "sarah@example.com",
-    from: { currency: "BTC", amount: "0.5", flag: "₿" },
-    to: { currency: "USD", amount: "21,500.00", flag: "🇺🇸" },
-    status: "payment_received",
-    paymentMethod: "crypto",
-    recipientName: "James Wilson",
-    recipientBank: "Bank of America",
-    recipientAccount: "123456789",
-    createdAt: "2024-12-23 09:15:00",
-    updatedAt: "2024-12-23 10:00:00",
-    rate: "43,000",
-    fee: "107.50",
-    notes: "Crypto payment confirmed on blockchain",
-  },
-  {
-    id: "ORD-2024-043",
-    userId: "USR-003",
-    userName: "Mike Johnson",
-    userEmail: "mike@example.com",
-    from: { currency: "EUR", amount: "10,000.00", flag: "🇪🇺" },
-    to: { currency: "GBP", amount: "8,600.00", flag: "🇬🇧" },
-    status: "processing",
-    paymentMethod: "bank",
-    recipientName: "Emily Brown",
-    recipientBank: "Barclays",
-    recipientAccount: "GB29 NWBK 6016 1331 9268 19",
-    createdAt: "2024-12-23 08:00:00",
-    updatedAt: "2024-12-23 09:30:00",
-    rate: "0.86",
-    fee: "43.00",
-    notes: "Processing transfer to Barclays",
-  },
-  {
-    id: "ORD-2024-042",
-    userId: "USR-004",
-    userName: "Lisa Anderson",
-    userEmail: "lisa@example.com",
-    from: { currency: "USD", amount: "2,500.00", flag: "🇺🇸" },
-    to: { currency: "JPY", amount: "373,750.00", flag: "🇯🇵" },
-    status: "completed",
-    paymentMethod: "bank",
-    recipientName: "Yuki Tanaka",
-    recipientBank: "MUFG Bank",
-    recipientAccount: "JP98 7654 3210 1234 5678",
-    createdAt: "2024-12-22 14:20:00",
-    updatedAt: "2024-12-23 08:15:00",
-    rate: "149.5",
-    fee: "12.50",
-    notes: "Completed successfully",
-  },
-  {
-    id: "ORD-2024-041",
-    userId: "USR-005",
-    userName: "Robert Brown",
-    userEmail: "robert@example.com",
-    from: { currency: "GBP", amount: "7,500.00", flag: "🇬🇧" },
-    to: { currency: "USD", amount: "9,525.00", flag: "🇺🇸" },
-    status: "failed",
-    paymentMethod: "bank",
-    recipientName: "Alice Cooper",
-    recipientBank: "Chase Bank",
-    recipientAccount: "US12 3456 7890 1234 5678",
-    createdAt: "2024-12-22 11:00:00",
-    updatedAt: "2024-12-22 15:30:00",
-    rate: "1.27",
-    fee: "37.50",
-    notes: "Failed due to insufficient funds",
-  },
-  {
-    id: "ORD-2024-040",
-    userId: "USR-006",
-    userName: "Jennifer Davis",
-    userEmail: "jennifer@example.com",
-    from: { currency: "CAD", amount: "3,200.00", flag: "🇨🇦" },
-    to: { currency: "EUR", amount: "2,176.00", flag: "🇪🇺" },
-    status: "cancelled",
-    paymentMethod: "bank",
-    recipientName: "Pierre Dubois",
-    recipientBank: "BNP Paribas",
-    recipientAccount: "FR76 3000 6000 0112 3456 7890 189",
-    createdAt: "2024-12-22 09:00:00",
-    updatedAt: "2024-12-22 10:00:00",
-    rate: "0.68",
-    fee: "16.00",
-    notes: "Cancelled by customer request",
-  },
-]
 
 const statusConfig = {
   pending_payment: {
@@ -224,18 +116,111 @@ const statusConfig = {
 }
 
 export default function OrdersManagement() {
-  const [orders, setOrders] = useState<Order[]>(initialOrders)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [page, setPage] = useState(1)
+  const pageSize = 10
+
+  const [selectedOrder, setSelectedOrder] = useState<OrderUI | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false)
-  const [newStatus, setNewStatus] = useState<Order["status"]>("pending_payment")
+  const [newStatus, setNewStatus] = useState<OrderUI["status"]>("pending_payment")
   const [statusNotes, setStatusNotes] = useState("")
-  const [sorting, setSorting] = useState<SortingState>([])
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
 
-  const columns = useMemo<ColumnDef<Order>[]>(
+  // API Queries & Mutations
+  const { data, isLoading, error } = useGetOrdersQuery({
+    page,
+    limit: pageSize,
+    search: searchQuery,
+    status: statusFilter === "all" ? undefined : statusFilter,
+  })
+
+  const [updateStatus, { isLoading: isUpdating }] = useUpdateOrderStatusMutation()
+  const dispatch = useAppDispatch()
+
+  // Replace Socket.io with SSE
+  const sseUrl = `${process.env.NEXT_PUBLIC_API_URL}/realtime/sse?role=admin`;
+
+  useSSE({
+    url: sseUrl,
+    events: {
+      new_order: (newOrder: any) => {
+        console.log('🔔 Admin SSE: Received new_order:', newOrder)
+        // Refresh the list if on page 1
+        if (page === 1) {
+          dispatch(
+            api.util.updateQueryData('getOrders' as any, {
+              page,
+              limit: pageSize,
+              search: searchQuery,
+              status: statusFilter === "all" ? undefined : statusFilter,
+            }, (draft: any) => {
+              if (draft && draft.data) {
+                if (!draft.data.some((o: any) => o.id === newOrder.id)) {
+                  console.log('✅ Admin SSE: Adding new order to cache')
+                  draft.data.unshift(newOrder)
+                }
+              }
+            })
+          )
+        }
+      },
+      order_updated: (updatedOrder: any) => {
+        console.log('🔔 Admin SSE: Received order_updated:', updatedOrder)
+        dispatch(
+          api.util.updateQueryData('getOrders' as any, {
+            page,
+            limit: pageSize,
+            search: searchQuery,
+            status: statusFilter === "all" ? undefined : statusFilter,
+          }, (draft: any) => {
+            if (draft && draft.data) {
+              const index = draft.data.findIndex((o: any) => o.id === updatedOrder.id)
+              if (index !== -1) {
+                console.log('✅ Admin SSE: Updating order in cache')
+                draft.data[index] = {
+                  ...draft.data[index],
+                  ...updatedOrder,
+                }
+              }
+            }
+          })
+        )
+      }
+    }
+  });
+
+  const mappedOrders = useMemo<OrderUI[]>(() => {
+    if (!data?.data) return []
+    return data.data.map((order: any) => ({
+      id: order.id,
+      userId: order.user?.id || "",
+      userName: order.user?.name || "Unknown",
+      userEmail: order.user?.email || "N/A",
+      from: {
+        currency: order.fromCurrency?.code || "???",
+        amount: order.fromAmount.toLocaleString(),
+        flag: order.fromCurrency?.flag || "🌍"
+      },
+      to: {
+        currency: order.toCurrency?.code || "???",
+        amount: order.toAmount.toLocaleString(),
+        flag: order.toCurrency?.flag || "🌍"
+      },
+      status: order.status as OrderUI["status"],
+      paymentMethod: order.paymentMethod?.name || order.paymentMethodId,
+      recipientName: order.recipientName || "N/A",
+      recipientBank: order.recipientBank || "N/A",
+      recipientAccount: order.recipientAccountNumber || "N/A",
+      createdAt: new Date(order.createdAt).toLocaleString(),
+      updatedAt: new Date(order.updatedAt).toLocaleString(),
+      rate: order.exchangeRate.toString(),
+      fee: order.fee.toString(),
+      notes: order.notes,
+    }))
+  }, [data])
+
+  const columns = useMemo<ColumnDef<OrderUI>[]>(
     () => [
       {
         accessorKey: "id",
@@ -287,8 +272,9 @@ export default function OrdersManagement() {
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => {
-          const status = row.getValue("status") as Order["status"]
+          const status = row.getValue("status") as OrderUI["status"]
           const config = statusConfig[status]
+          if (!config) return <Badge>{status}</Badge>
           const Icon = config.icon
           return (
             <Badge variant={config.variant} className={config.className}>
@@ -332,64 +318,58 @@ export default function OrdersManagement() {
     []
   )
 
-  const filteredData = useMemo(() => {
-    return orders.filter((order) => {
-      const matchesSearch =
-        order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.userEmail.toLowerCase().includes(searchQuery.toLowerCase())
-
-      const matchesStatus = statusFilter === "all" || order.status === statusFilter
-
-      return matchesSearch && matchesStatus
-    })
-  }, [orders, searchQuery, statusFilter])
-
   const table = useReactTable({
-    data: filteredData,
+    data: mappedOrders,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    state: {
-      sorting,
-      columnFilters,
-    },
   })
 
-  const handleViewDetails = (order: Order) => {
+  const handleViewDetails = (order: OrderUI) => {
     setSelectedOrder(order)
     setIsDetailsOpen(true)
   }
 
-  const handleUpdateStatus = () => {
+  const handleUpdateStatus = async () => {
     if (selectedOrder) {
-      setOrders(
-        orders.map((o) =>
-          o.id === selectedOrder.id
-            ? {
-                ...o,
-                status: newStatus,
-                notes: statusNotes || o.notes,
-                updatedAt: new Date().toLocaleString(),
-              }
-            : o
-        )
-      )
-      setIsStatusDialogOpen(false)
-      setIsDetailsOpen(false)
-      setStatusNotes("")
+      try {
+        await updateStatus({
+          id: selectedOrder.id,
+          status: newStatus,
+          notes: statusNotes,
+        }).unwrap()
+
+        setIsStatusDialogOpen(false)
+        setIsDetailsOpen(false)
+        setStatusNotes("")
+        // RTK Query will automatically refetch due to tag invalidation
+      } catch (err) {
+        console.error("Failed to update status:", err)
+      }
     }
   }
 
-  const openStatusDialog = (order: Order) => {
+  const openStatusDialog = (order: OrderUI) => {
     setSelectedOrder(order)
     setNewStatus(order.status)
     setStatusNotes("")
     setIsStatusDialogOpen(true)
+  }
+
+  if (isLoading && page === 1) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="size-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-2">
+        <AlertCircle className="size-8 text-destructive" />
+        <p className="text-muted-foreground">Failed to load orders</p>
+      </div>
+    )
   }
 
   return (
@@ -402,32 +382,28 @@ export default function OrdersManagement() {
         </p>
       </div>
 
-      {/* Status Counts */}
-      <div className="flex gap-3 md:gap-6 overflow-x-auto pb-2">
-        {Object.entries(statusConfig).map(([status, config]) => {
-          const count = orders.filter((o) => o.status === status).length
-          return (
-            <div key={status} className="text-center min-w-[80px]">
-              <div className="text-lg md:text-2xl font-bold">{count}</div>
-              <div className="text-[10px] md:text-xs text-muted-foreground whitespace-nowrap">{config.label}</div>
-            </div>
-          )
-        })}
-      </div>
-
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value)
+              setPage(1)
+            }}
             placeholder="Search by order ID, user name, or email..."
             className="pl-10"
           />
         </div>
         <div className="w-full sm:w-50">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select
+            value={statusFilter}
+            onValueChange={(val) => {
+              setStatusFilter(val)
+              setPage(1)
+            }}
+          >
             <SelectTrigger>
               <Filter className="size-4 mr-2" />
               <SelectValue placeholder="All Statuses" />
@@ -445,75 +421,83 @@ export default function OrdersManagement() {
       </div>
 
       {/* Table */}
-      <div className="rounded-md border">
+      <div className="rounded-md border relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-10">
+            <Loader2 className="size-6 animate-spin text-primary" />
+          </div>
+        )}
         <div className="overflow-x-auto">
           <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <TableHead key={header.id}>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
                           header.column.columnDef.header,
                           header.getContext()
                         )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
+                    </TableHead>
                   ))}
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  No results.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow key={row.id}>
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={columns.length}
+                    className="h-24 text-center"
+                  >
+                    No results.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
       </div>
 
       {/* Pagination */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="text-xs md:text-sm text-muted-foreground">
-          Showing {table.getRowModel().rows.length} of {filteredData.length}{" "}
-          orders
+          Showing {mappedOrders.length} orders
+          {data?.pagination && ` of ${data.pagination.total}`}
         </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
           >
             <ChevronLeft className="size-4" />
             <span className="hidden sm:inline">Previous</span>
           </Button>
+          <div className="text-sm font-medium">
+            Page {page} {data?.pagination && `of ${data.pagination.totalPages}`}
+          </div>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
+            onClick={() => setPage(p => p + 1)}
+            disabled={data?.pagination ? page >= data.pagination.totalPages : true}
           >
             <span className="hidden sm:inline">Next</span>
             <ChevronRight className="size-4" />
@@ -542,6 +526,7 @@ export default function OrdersManagement() {
                   <div className="mt-1">
                     {(() => {
                       const config = statusConfig[selectedOrder.status]
+                      if (!config) return <Badge>{selectedOrder.status}</Badge>
                       const Icon = config.icon
                       return (
                         <Badge variant={config.variant} className={config.className}>
@@ -672,7 +657,7 @@ export default function OrdersManagement() {
               <Label htmlFor="newStatus">New Status</Label>
               <Select
                 value={newStatus}
-                onValueChange={(value) => setNewStatus(value as Order["status"])}
+                onValueChange={(value) => setNewStatus(value as OrderUI["status"])}
               >
                 <SelectTrigger id="newStatus" className="mt-1">
                   <SelectValue />
@@ -702,12 +687,18 @@ export default function OrdersManagement() {
             <div className="flex gap-3 pt-4">
               <Button
                 variant="outline"
+                disabled={isUpdating}
                 onClick={() => setIsStatusDialogOpen(false)}
                 className="flex-1"
               >
                 Cancel
               </Button>
-              <Button onClick={handleUpdateStatus} className="flex-1">
+              <Button
+                onClick={handleUpdateStatus}
+                className="flex-1"
+                disabled={isUpdating}
+              >
+                {isUpdating ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
                 Update Status
               </Button>
             </div>

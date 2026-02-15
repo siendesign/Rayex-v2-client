@@ -25,6 +25,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  console.log("[RootLayout] Clerk PK exists:", !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+  console.log("[RootLayout] Clerk SK exists:", !!process.env.CLERK_SECRET_KEY);
+
   return (
     <ClerkProvider>
       <StoreProvider>

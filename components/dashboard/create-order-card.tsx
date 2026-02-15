@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 
 export function CreateOrderCard() {
   return (
-    <div className="bg-gradient-to-br from-primary to-primary/80 rounded-2xl p-4 md:p-8 text-primary-foreground">
+    <div className="bg-gradient-to-br from-primary to-primary/80 rounded-lg p-4 md:p-8 text-primary-foreground">
       <div className="flex items-start justify-between mb-4 md:mb-6">
         <div>
           <h2 className="text-xl md:text-2xl font-bold mb-1 md:mb-2">Create Exchange Order</h2>
@@ -45,10 +45,10 @@ export function CreateOrderCard() {
         </Button>
       </Link>
 
-      <div className="mt-4 md:mt-6 pt-4 md:pt-6 border-t border-white/20">
+      {/* <div className="mt-4 md:mt-6 pt-4 md:pt-6 border-t border-white/20">
         <div className="grid grid-cols-3 gap-2 md:gap-4 text-center">
           <div>
-            <div className="text-lg md:text-2xl font-bold">0.5%</div>
+            <div className="text-lg md:text-2xl font-bold">0.0%</div>
             <div className="text-[10px] md:text-xs text-primary-foreground/80">Our Fee</div>
           </div>
           <div>
@@ -60,7 +60,7 @@ export function CreateOrderCard() {
             <div className="text-[10px] md:text-xs text-primary-foreground/80">Countries</div>
           </div>
         </div>
-      </div>
+      </div> */}
     </div>
   )
 }

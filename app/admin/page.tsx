@@ -1,3 +1,5 @@
+"use client"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -9,99 +11,117 @@ import {
   CheckCircleIcon,
   AlertCircleIcon,
   XCircleIcon,
+  Loader2,
 } from "lucide-react"
+import { useGetStatsQuery } from "@/state/api"
+import { useSSE } from "@/hooks/useSSE"
 
 export default function AdminDashboard() {
-  // Mock data for stats
+  const { data, isLoading, error, refetch } = useGetStatsQuery()
+
+  // Real-time updates via SSE
+  const sseUrl = `${process.env.NEXT_PUBLIC_API_URL}/realtime/sse?role=admin`;
+
+  useSSE({
+    url: sseUrl,
+    events: {
+      new_order: (order: any) => {
+        console.log('📊 SSE: New order created, refreshing dashboard stats...', order.id)
+        refetch()
+      },
+      order_updated: (order: any) => {
+        console.log('📊 SSE: Order updated, refreshing dashboard stats...', order.id)
+        refetch()
+      }
+    }
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="size-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-2">
+        <AlertCircleIcon className="size-8 text-destructive" />
+        <p className="text-muted-foreground">Failed to load platform statistics</p>
+      </div>
+    )
+  }
+
+  const metrics = data?.data?.metrics || {}
+  const recentOrdersData = data?.data?.recentOrders || []
+
   const stats = [
     {
       title: "Total Orders",
-      value: "1,234",
-      change: "+12.5%",
+      value: metrics.totalOrders?.toLocaleString() || "0",
+      change: "+0%", // Future: calculate from historical data
       trend: "up",
       icon: ActivityIcon,
     },
     {
       title: "Pending Orders",
-      value: "23",
-      change: "-5.2%",
-      trend: "down",
+      value: metrics.pendingOrders?.toLocaleString() || "0",
+      change: "n/a",
+      trend: "up",
       icon: ClockIcon,
     },
     {
       title: "Total Volume",
-      value: "$2.4M",
-      change: "+18.3%",
+      value: `$${(metrics.totalVolume || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`,
+      change: "+0%",
       trend: "up",
       icon: DollarSignIcon,
     },
     {
       title: "Active Users",
-      value: "892",
-      change: "+8.1%",
+      value: metrics.activeUsers?.toLocaleString() || "0",
+      change: "+0%",
       trend: "up",
       icon: UsersIcon,
     },
   ]
 
-  // Mock recent orders
-  const recentOrders = [
-    {
-      id: "ORD-2024-156",
-      user: "John Smith",
-      from: { currency: "USD", amount: "5,000" },
-      to: { currency: "EUR", amount: "4,600" },
-      status: "completed" as const,
-      date: "2024-01-10 14:30",
+  // Recent orders mapping
+  const recentOrders = recentOrdersData.map((order: any) => ({
+    id: order.id,
+    user: order.user?.name || "Unknown User",
+    from: {
+      currency: order.fromCurrency?.code || "???",
+      amount: order.fromAmount?.toLocaleString()
     },
-    {
-      id: "ORD-2024-155",
-      user: "Sarah Johnson",
-      from: { currency: "GBP", amount: "2,500" },
-      to: { currency: "USD", amount: "3,175" },
-      status: "processing" as const,
-      date: "2024-01-10 13:45",
+    to: {
+      currency: order.toCurrency?.code || "???",
+      amount: order.toAmount?.toLocaleString()
     },
-    {
-      id: "ORD-2024-154",
-      user: "Michael Chen",
-      from: { currency: "EUR", amount: "10,000" },
-      to: { currency: "JPY", amount: "1,620,000" },
-      status: "pending_payment" as const,
-      date: "2024-01-10 12:20",
-    },
-    {
-      id: "ORD-2024-153",
-      user: "Emma Wilson",
-      from: { currency: "USD", amount: "7,500" },
-      to: { currency: "GBP", amount: "5,925" },
-      status: "completed" as const,
-      date: "2024-01-10 11:15",
-    },
-    {
-      id: "ORD-2024-152",
-      user: "David Lee",
-      from: { currency: "CAD", amount: "3,000" },
-      to: { currency: "EUR", amount: "2,070" },
-      status: "failed" as const,
-      date: "2024-01-10 10:05",
-    },
-  ]
+    status: order.status,
+    date: new Date(order.createdAt).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }),
+  }))
 
   // Status breakdown
   const statusBreakdown = [
-    { status: "Pending", count: 23, color: "bg-yellow-500", icon: ClockIcon },
-    { status: "Processing", count: 45, color: "bg-blue-500", icon: ActivityIcon },
-    { status: "Completed", count: 1156, color: "bg-green-500", icon: CheckCircleIcon },
-    { status: "Failed", count: 10, color: "bg-red-500", icon: XCircleIcon },
+    { status: "Pending", count: metrics.pendingOrders || 0, color: "bg-yellow-500", icon: ClockIcon },
+    { status: "Processing", count: 0, color: "bg-blue-500", icon: ActivityIcon }, // Simplified for now
+    { status: "Completed", count: metrics.totalOrders - metrics.pendingOrders || 0, color: "bg-green-500", icon: CheckCircleIcon },
+    { status: "Failed", count: 0, color: "bg-red-500", icon: XCircleIcon },
   ]
 
-  // Performance metrics
+  // Performance metrics (Mocked for now as backend doesn't provide these)
   const performanceMetrics = [
-    { label: "Average Processing Time", value: "2.3 hours" },
-    { label: "Success Rate", value: "99.2%" },
-    { label: "Customer Satisfaction", value: "4.8/5.0" },
-    { label: "Response Time", value: "< 5 min" },
+    { label: "Total Platform Fees", value: `$${(metrics.totalFees || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}` },
+    { label: "Pending Verifications", value: metrics.pendingVerifications?.toString() || "0" },
+    { label: "Success Rate", value: metrics.totalOrders > 0 ? `${(((metrics.totalOrders - metrics.pendingOrders) / metrics.totalOrders) * 100).toFixed(1)}%` : "100%" },
+    { label: "Total Users", value: metrics.totalUsers?.toString() || "0" },
   ]
 
   const getStatusBadge = (status: string) => {
@@ -146,16 +166,14 @@ export default function AdminDashboard() {
               <CardContent>
                 <div className="text-xl md:text-2xl font-bold">{stat.value}</div>
                 <p
-                  className={`text-[10px] md:text-xs ${
-                    stat.trend === "up"
-                      ? "text-green-600 dark:text-green-400"
-                      : "text-red-600 dark:text-red-400"
-                  } flex items-center gap-0.5 md:gap-1 mt-1`}
+                  className={`text-[10px] md:text-xs ${stat.trend === "up"
+                    ? "text-green-600 dark:text-green-400"
+                    : "text-red-600 dark:text-red-400"
+                    } flex items-center gap-0.5 md:gap-1 mt-1`}
                 >
                   <TrendingUpIcon
-                    className={`size-2.5 md:size-3 ${
-                      stat.trend === "down" ? "rotate-180" : ""
-                    }`}
+                    className={`size-2.5 md:size-3 ${stat.trend === "down" ? "rotate-180" : ""
+                      }`}
                   />
                   <span className="hidden sm:inline">{stat.change} from last month</span>
                   <span className="sm:hidden">{stat.change}</span>
@@ -174,7 +192,7 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3 md:space-y-4">
-              {recentOrders.map((order) => (
+              {recentOrders.map((order: any) => (
                 <div
                   key={order.id}
                   className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 border-b border-border pb-3 md:pb-4 last:border-0 last:pb-0"

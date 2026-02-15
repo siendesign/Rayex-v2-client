@@ -4,9 +4,6 @@ import { useState, useMemo } from "react"
 import {
   useReactTable,
   getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
   flexRender,
   type ColumnDef,
 } from "@tanstack/react-table"
@@ -45,10 +42,25 @@ import {
   TrendingUp,
   TrendingDown,
   RefreshCw,
+  Loader2,
+  AlertCircle,
 } from "lucide-react"
+import {
+  useGetExchangeRatesQuery,
+  useCreateExchangeRateMutation,
+  useUpdateExchangeRateMutation,
+  useRefreshExchangeRateMutation,
+  useRefreshAllExchangeRatesMutation,
+  useGetCurrenciesQuery,
+  api
+} from "@/state/api"
+import { useSSE } from "@/hooks/useSSE"
+import { useAppDispatch } from "@/state/redux"
 
-interface ExchangeRate {
+interface ExchangeRateUI {
   id: string
+  fromCurrencyId: string
+  toCurrencyId: string
   fromCurrency: string
   toCurrency: string
   rate: number
@@ -57,106 +69,51 @@ interface ExchangeRate {
   active: boolean
   lastUpdated: string
   autoUpdate: boolean
-  trend?: "up" | "down"
 }
 
-const initialRates: ExchangeRate[] = [
-  {
-    id: "1",
-    fromCurrency: "USD",
-    toCurrency: "EUR",
-    rate: 0.92,
-    buyRate: 0.918,
-    sellRate: 0.922,
-    active: true,
-    lastUpdated: "2024-12-23 10:30:00",
-    autoUpdate: true,
-    trend: "up",
-  },
-  {
-    id: "2",
-    fromCurrency: "USD",
-    toCurrency: "GBP",
-    rate: 0.79,
-    buyRate: 0.788,
-    sellRate: 0.792,
-    active: true,
-    lastUpdated: "2024-12-23 10:30:00",
-    autoUpdate: true,
-    trend: "down",
-  },
-  {
-    id: "3",
-    fromCurrency: "USD",
-    toCurrency: "JPY",
-    rate: 149.5,
-    buyRate: 149.0,
-    sellRate: 150.0,
-    active: true,
-    lastUpdated: "2024-12-23 10:30:00",
-    autoUpdate: true,
-    trend: "up",
-  },
-  {
-    id: "4",
-    fromCurrency: "EUR",
-    toCurrency: "GBP",
-    rate: 0.86,
-    buyRate: 0.858,
-    sellRate: 0.862,
-    active: true,
-    lastUpdated: "2024-12-23 10:30:00",
-    autoUpdate: true,
-    trend: "up",
-  },
-  {
-    id: "5",
-    fromCurrency: "BTC",
-    toCurrency: "USD",
-    rate: 43000,
-    buyRate: 42800,
-    sellRate: 43200,
-    active: true,
-    lastUpdated: "2024-12-23 10:28:00",
-    autoUpdate: true,
-    trend: "down",
-  },
-  {
-    id: "6",
-    fromCurrency: "EUR",
-    toCurrency: "USD",
-    rate: 1.09,
-    buyRate: 1.085,
-    sellRate: 1.095,
-    active: true,
-    lastUpdated: "2024-12-23 10:30:00",
-    autoUpdate: true,
-    trend: "up",
-  },
-]
-
-const currencies = [
-  "USD",
-  "EUR",
-  "GBP",
-  "JPY",
-  "CAD",
-  "AUD",
-  "CHF",
-  "BTC",
-  "ETH",
-  "USDT",
-]
-
 export default function ExchangeRatesManagement() {
-  const [rates, setRates] = useState<ExchangeRate[]>(initialRates)
+  const dispatch = useAppDispatch()
   const [searchQuery, setSearchQuery] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [editingRate, setEditingRate] = useState<ExchangeRate | null>(null)
+  const [editingRate, setEditingRate] = useState<ExchangeRateUI | null>(null)
 
-  const [formData, setFormData] = useState<Partial<ExchangeRate>>({
-    fromCurrency: "USD",
-    toCurrency: "EUR",
+  // API Queries & Mutations
+  const { data, isLoading, error } = useGetExchangeRatesQuery()
+
+  // Real-time updates via SSE
+  const sseUrl = `${process.env.NEXT_PUBLIC_API_URL}/realtime/sse?role=public`;
+
+  useSSE({
+    url: sseUrl,
+    events: {
+      rate_updated: (updatedRate: any) => {
+        console.log('📈 SSE: Rate updated in admin view:', updatedRate.id)
+        dispatch(
+          api.util.updateQueryData('getExchangeRates' as any, undefined, (draft: any) => {
+            if (draft && draft.data) {
+              const index = draft.data.findIndex((r: any) => r.id === updatedRate.id)
+              if (index !== -1) {
+                draft.data[index] = updatedRate
+              } else {
+                draft.data.unshift(updatedRate)
+              }
+            }
+          })
+        )
+      }
+    }
+  });
+  const { data: currenciesData } = useGetCurrenciesQuery()
+  const [createRate, { isLoading: isCreating }] = useCreateExchangeRateMutation()
+  const [updateRate, { isLoading: isUpdating }] = useUpdateExchangeRateMutation()
+  const [refreshRateMutation] = useRefreshExchangeRateMutation()
+  const [refreshAllMutation] = useRefreshAllExchangeRatesMutation()
+
+  const isSaving = isCreating || isUpdating
+
+  const [formData, setFormData] = useState<Partial<ExchangeRateUI>>({
+    fromCurrencyId: "",
+    toCurrencyId: "",
     rate: 0,
     buyRate: 0,
     sellRate: 0,
@@ -164,7 +121,26 @@ export default function ExchangeRatesManagement() {
     autoUpdate: true,
   })
 
-  const columns = useMemo<ColumnDef<ExchangeRate>[]>(
+  const rates = data?.data || []
+  const availableCurrencies = currenciesData?.data || []
+
+  const mappedRates = useMemo<ExchangeRateUI[]>(() => {
+    return rates.map((rate: any) => ({
+      id: rate.id,
+      fromCurrencyId: rate.fromCurrencyId,
+      toCurrencyId: rate.toCurrencyId,
+      fromCurrency: rate.fromCurrency?.code || "???",
+      toCurrency: rate.toCurrency?.code || "???",
+      rate: rate.rate,
+      buyRate: rate.buyRate,
+      sellRate: rate.sellRate,
+      active: rate.active,
+      lastUpdated: new Date(rate.lastUpdated).toLocaleString(),
+      autoUpdate: rate.autoUpdate,
+    }))
+  }, [rates])
+
+  const columns = useMemo<ColumnDef<ExchangeRateUI>[]>(
     () => [
       {
         id: "pair",
@@ -185,15 +161,6 @@ export default function ExchangeRatesManagement() {
                 row.original.rate < 10 ? 6 : row.original.rate < 100 ? 4 : 2
               )}
             </span>
-            {row.original.trend && (
-              <>
-                {row.original.trend === "up" ? (
-                  <TrendingUp className="size-4 text-green-600" />
-                ) : (
-                  <TrendingDown className="size-4 text-red-600" />
-                )}
-              </>
-            )}
           </div>
         ),
       },
@@ -203,11 +170,7 @@ export default function ExchangeRatesManagement() {
         cell: ({ row }) => (
           <span>
             {row.original.buyRate.toFixed(
-              row.original.buyRate < 10
-                ? 6
-                : row.original.buyRate < 100
-                ? 4
-                : 2
+              row.original.buyRate < 10 ? 6 : row.original.buyRate < 100 ? 4 : 2
             )}
           </span>
         ),
@@ -218,11 +181,7 @@ export default function ExchangeRatesManagement() {
         cell: ({ row }) => (
           <span>
             {row.original.sellRate.toFixed(
-              row.original.sellRate < 10
-                ? 6
-                : row.original.sellRate < 100
-                ? 4
-                : 2
+              row.original.sellRate < 10 ? 6 : row.original.sellRate < 100 ? 4 : 2
             )}
           </span>
         ),
@@ -255,7 +214,7 @@ export default function ExchangeRatesManagement() {
         cell: ({ row }) => (
           <Switch
             checked={row.getValue("active")}
-            onCheckedChange={() => toggleActive(row.original.id)}
+            onCheckedChange={() => toggleActive(row.original)}
           />
         ),
       },
@@ -279,13 +238,6 @@ export default function ExchangeRatesManagement() {
             >
               <Edit2 className="size-4 text-blue-600" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => handleDelete(row.original.id)}
-            >
-              <Trash2 className="size-4 text-red-600" />
-            </Button>
           </div>
         ),
       },
@@ -294,55 +246,61 @@ export default function ExchangeRatesManagement() {
   )
 
   const filteredData = useMemo(() => {
-    return rates.filter(
+    return mappedRates.filter(
       (rate) =>
         rate.fromCurrency.toLowerCase().includes(searchQuery.toLowerCase()) ||
         rate.toCurrency.toLowerCase().includes(searchQuery.toLowerCase())
     )
-  }, [rates, searchQuery])
+  }, [mappedRates, searchQuery])
 
   const table = useReactTable({
     data: filteredData,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    try {
+      // Prepare the request data by removing UI-only fields
+      const { fromCurrency, toCurrency, lastUpdated, id, ...requestData } = formData as any
 
-    if (editingRate) {
-      setRates(
-        rates.map((r) =>
-          r.id === editingRate.id
-            ? { ...r, ...formData, lastUpdated: new Date().toLocaleString() }
-            : r
-        )
-      )
-    } else {
-      const newRate: ExchangeRate = {
-        id: Date.now().toString(),
-        fromCurrency: formData.fromCurrency || "USD",
-        toCurrency: formData.toCurrency || "EUR",
-        rate: formData.rate || 0,
-        buyRate: formData.buyRate || 0,
-        sellRate: formData.sellRate || 0,
-        active: formData.active ?? true,
-        autoUpdate: formData.autoUpdate ?? true,
-        lastUpdated: new Date().toLocaleString(),
+      if (editingRate) {
+        // For updates, we only send the fields allowed by UpdateExchangeRateRequest
+        const updateData = {
+          rate: requestData.rate,
+          buyRate: requestData.buyRate,
+          sellRate: requestData.sellRate,
+          active: requestData.active,
+          autoUpdate: requestData.autoUpdate,
+        }
+        await updateRate({
+          id: editingRate.id,
+          data: updateData,
+        }).unwrap()
+      } else {
+        // For creation, we need fromCurrencyId and toCurrencyId
+        const createData = {
+          fromCurrencyId: requestData.fromCurrencyId,
+          toCurrencyId: requestData.toCurrencyId,
+          rate: requestData.rate,
+          buyRate: requestData.buyRate,
+          sellRate: requestData.sellRate,
+          active: requestData.active,
+          autoUpdate: requestData.autoUpdate,
+        }
+        await createRate(createData as any).unwrap()
       }
-      setRates([...rates, newRate])
+      resetForm()
+    } catch (err) {
+      console.error("Failed to save exchange rate:", err)
     }
-
-    resetForm()
   }
 
   const resetForm = () => {
     setFormData({
-      fromCurrency: "USD",
-      toCurrency: "EUR",
+      fromCurrencyId: "",
+      toCurrencyId: "",
       rate: 0,
       buyRate: 0,
       sellRate: 0,
@@ -353,33 +311,62 @@ export default function ExchangeRatesManagement() {
     setEditingRate(null)
   }
 
-  const handleEdit = (rate: ExchangeRate) => {
+  const handleEdit = (rate: ExchangeRateUI) => {
     setEditingRate(rate)
-    setFormData(rate)
+    setFormData({
+      fromCurrencyId: rate.fromCurrencyId,
+      toCurrencyId: rate.toCurrencyId,
+      rate: rate.rate,
+      buyRate: rate.buyRate,
+      sellRate: rate.sellRate,
+      active: rate.active,
+      autoUpdate: rate.autoUpdate,
+    })
     setIsAddDialogOpen(true)
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this exchange rate?")) {
-      setRates(rates.filter((r) => r.id !== id))
+  const toggleActive = async (rate: ExchangeRateUI) => {
+    try {
+      await updateRate({
+        id: rate.id,
+        data: { active: !rate.active },
+      }).unwrap()
+    } catch (err) {
+      console.error("Failed to toggle rate status:", err)
     }
   }
 
-  const toggleActive = (id: string) => {
-    setRates(rates.map((r) => (r.id === id ? { ...r, active: !r.active } : r)))
+  const refreshRate = async (id: string) => {
+    try {
+      await refreshRateMutation(id).unwrap()
+    } catch (err) {
+      console.error("Failed to refresh rate:", err)
+    }
   }
 
-  const refreshRate = (id: string) => {
-    setRates(
-      rates.map((r) =>
-        r.id === id ? { ...r, lastUpdated: new Date().toLocaleString() } : r
-      )
+  const handleRefreshAll = async () => {
+    try {
+      await refreshAllMutation().unwrap()
+    } catch (err) {
+      console.error("Failed to refresh all rates:", err)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="size-8 animate-spin text-primary" />
+      </div>
     )
   }
 
-  const refreshAllRates = () => {
-    const now = new Date().toLocaleString()
-    setRates(rates.map((r) => ({ ...r, lastUpdated: now })))
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-2">
+        <AlertCircle className="size-8 text-destructive" />
+        <p className="text-muted-foreground">Failed to load exchange rates</p>
+      </div>
+    )
   }
 
   return (
@@ -393,7 +380,7 @@ export default function ExchangeRatesManagement() {
           </p>
         </div>
         <div className="flex gap-2 md:gap-3">
-          <Button variant="outline" onClick={refreshAllRates} size="sm" className="md:size-default">
+          <Button variant="outline" onClick={handleRefreshAll} size="sm" className="md:size-default">
             <RefreshCw className="size-4 mr-2" />
             <span className="hidden sm:inline">Refresh All</span>
             <span className="sm:hidden">Refresh</span>
@@ -421,18 +408,18 @@ export default function ExchangeRatesManagement() {
                   <div>
                     <Label htmlFor="fromCurrency">From Currency *</Label>
                     <Select
-                      value={formData.fromCurrency}
+                      value={formData.fromCurrencyId}
                       onValueChange={(value) =>
-                        setFormData({ ...formData, fromCurrency: value })
+                        setFormData({ ...formData, fromCurrencyId: value })
                       }
                     >
                       <SelectTrigger id="fromCurrency" className="mt-1">
-                        <SelectValue />
+                        <SelectValue placeholder="Select" />
                       </SelectTrigger>
                       <SelectContent>
-                        {currencies.map((curr) => (
-                          <SelectItem key={curr} value={curr}>
-                            {curr}
+                        {availableCurrencies.map((curr: any) => (
+                          <SelectItem key={curr.id} value={curr.id}>
+                            {curr.code}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -442,18 +429,18 @@ export default function ExchangeRatesManagement() {
                   <div>
                     <Label htmlFor="toCurrency">To Currency *</Label>
                     <Select
-                      value={formData.toCurrency}
+                      value={formData.toCurrencyId}
                       onValueChange={(value) =>
-                        setFormData({ ...formData, toCurrency: value })
+                        setFormData({ ...formData, toCurrencyId: value })
                       }
                     >
                       <SelectTrigger id="toCurrency" className="mt-1">
-                        <SelectValue />
+                        <SelectValue placeholder="Select" />
                       </SelectTrigger>
                       <SelectContent>
-                        {currencies.map((curr) => (
-                          <SelectItem key={curr} value={curr}>
-                            {curr}
+                        {availableCurrencies.map((curr: any) => (
+                          <SelectItem key={curr.id} value={curr.id}>
+                            {curr.code}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -471,7 +458,7 @@ export default function ExchangeRatesManagement() {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        rate: parseFloat(e.target.value),
+                        rate: e.target.value === "" ? 0 : parseFloat(e.target.value),
                       })
                     }
                     placeholder="0.00"
@@ -493,7 +480,7 @@ export default function ExchangeRatesManagement() {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        buyRate: parseFloat(e.target.value),
+                        buyRate: e.target.value === "" ? 0 : parseFloat(e.target.value),
                       })
                     }
                     placeholder="0.00"
@@ -515,7 +502,7 @@ export default function ExchangeRatesManagement() {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        sellRate: parseFloat(e.target.value),
+                        sellRate: e.target.value === "" ? 0 : parseFloat(e.target.value),
                       })
                     }
                     placeholder="0.00"
@@ -553,12 +540,14 @@ export default function ExchangeRatesManagement() {
                   <Button
                     type="button"
                     variant="outline"
+                    disabled={isSaving}
                     onClick={() => setIsAddDialogOpen(false)}
                     className="flex-1"
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" className="flex-1">
+                  <Button type="submit" className="flex-1" disabled={isSaving}>
+                    {isSaving ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
                     {editingRate ? "Update" : "Add"} Rate
                   </Button>
                 </div>
@@ -583,48 +572,48 @@ export default function ExchangeRatesManagement() {
       <div className="rounded-md border">
         <div className="overflow-x-auto">
           <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <TableHead key={header.id}>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
                           header.column.columnDef.header,
                           header.getContext()
                         )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
+                    </TableHead>
                   ))}
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  No results.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow key={row.id}>
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={columns.length}
+                    className="h-24 text-center"
+                  >
+                    No results.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
       </div>
     </div>

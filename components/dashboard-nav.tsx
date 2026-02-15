@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Bell, Settings, LogOut, ArrowRightLeft, Menu, X } from "lucide-react"
+import { Bell, Settings, LogOut, ArrowRightLeft, Menu, X, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useClerk, useUser } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
@@ -39,6 +39,22 @@ export function DashboardNav() {
               </div>
               <span className="text-lg md:text-xl font-semibold">RayEx</span>
             </Link>
+
+            {/* Desktop Navigation Links */}
+            <div className="hidden md:flex items-center gap-6 ml-8 flex-1">
+              <Link
+                href="/dashboard"
+                className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+              >
+                Dashboard
+              </Link>
+              <Link
+                href="/dashboard/orders"
+                className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+              >
+                My Orders
+              </Link>
+            </div>
 
             {/* Desktop Right Actions */}
             <div className="hidden md:flex items-center gap-2">
@@ -93,6 +109,18 @@ export function DashboardNav() {
 
               {/* Menu Items */}
               <div className="space-y-2">
+                <Link href="/dashboard" onClick={() => setIsMobileMenuOpen(false)}>
+                  <Button variant="ghost" className="w-full justify-start gap-3">
+                    <ArrowRightLeft className="size-5" />
+                    <span>Dashboard</span>
+                  </Button>
+                </Link>
+                <Link href="/dashboard/orders" onClick={() => setIsMobileMenuOpen(false)}>
+                  <Button variant="ghost" className="w-full justify-start gap-3">
+                    <Clock className="size-5" />
+                    <span>My Orders</span>
+                  </Button>
+                </Link>
                 <Button variant="ghost" className="w-full justify-start gap-3">
                   <Bell className="size-5" />
                   <span>Notifications</span>

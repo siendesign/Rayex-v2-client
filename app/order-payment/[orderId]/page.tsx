@@ -3,39 +3,19 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter, useParams } from "next/navigation"
-import { ArrowRightLeft, Copy, CheckCircle2, AlertCircle, Clock, ArrowLeft } from "lucide-react"
+import { ArrowRightLeft, Copy, CheckCircle2, AlertCircle, Clock, ArrowLeft, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useGetOrderQuery } from "@/state/api"
 
 export default function OrderPaymentPage() {
   const router = useRouter()
   const params = useParams()
   const orderId = params.orderId as string
 
+  const { data: orderData, isLoading, isError } = useGetOrderQuery(orderId)
+  const order = orderData?.data
+
   const [copied, setCopied] = useState<string | null>(null)
-
-  // Mock order data - in real app this would come from API
-  const order = {
-    id: orderId,
-    from: { currency: "USD", amount: "5,000.00", flag: "🇺🇸" },
-    to: { currency: "EUR", amount: "4,600.00", flag: "🇪🇺" },
-    paymentMethod: "bank",
-  }
-
-  const bankDetails = {
-    bankName: "RayEx International Bank",
-    accountName: "RayEx Ltd.",
-    accountNumber: "1234567890",
-    routingNumber: "021000021",
-    swift: "RAYXUS33",
-    iban: "GB29 NWBK 6016 1331 9268 19",
-    reference: order.id,
-  }
-
-  const cryptoDetails = {
-    network: "Bitcoin",
-    address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
-    amount: "0.15 BTC",
-  }
 
   const copyToClipboard = async (text: string, label: string) => {
     try {
@@ -47,7 +27,32 @@ export default function OrderPaymentPage() {
     }
   }
 
-  const isBank = order.paymentMethod === "bank"
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-muted/30 flex items-center justify-center">
+        <div className="flex flex-col items-center">
+          <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground">Loading payment details...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (isError || !order) {
+    return (
+      <div className="min-h-screen bg-muted/30 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Order Not Found</h2>
+          <p className="text-muted-foreground mb-6">We couldn&apos;t find the order you&apos;re looking for.</p>
+          <Button onClick={() => router.push("/dashboard")}>Back to Dashboard</Button>
+        </div>
+      </div>
+    )
+  }
+
+  const isBank = order.paymentMethod.type === "bank"
+  const payoutDetails = order.paymentMethod
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -99,20 +104,20 @@ export default function OrderPaymentPage() {
             <div className="bg-muted rounded-lg p-4">
               <div className="text-sm text-muted-foreground mb-2">You send</div>
               <div className="flex items-center gap-2">
-                <span className="text-3xl">{order.from.flag}</span>
+                <span className="text-3xl">{order.fromCurrency.flag}</span>
                 <div>
-                  <div className="text-2xl font-bold">{order.from.amount}</div>
-                  <div className="text-sm text-muted-foreground">{order.from.currency}</div>
+                  <div className="text-2xl font-bold">{order.fromAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div className="text-sm text-muted-foreground">{order.fromCurrency.code}</div>
                 </div>
               </div>
             </div>
             <div className="bg-muted rounded-lg p-4">
               <div className="text-sm text-muted-foreground mb-2">Recipient receives</div>
               <div className="flex items-center gap-2">
-                <span className="text-3xl">{order.to.flag}</span>
+                <span className="text-3xl">{order.toCurrency.flag}</span>
                 <div>
-                  <div className="text-2xl font-bold">{order.to.amount}</div>
-                  <div className="text-sm text-muted-foreground">{order.to.currency}</div>
+                  <div className="text-2xl font-bold">{order.toAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div className="text-sm text-muted-foreground">{order.toCurrency.code}</div>
                 </div>
               </div>
             </div>
@@ -125,7 +130,7 @@ export default function OrderPaymentPage() {
             <AlertCircle className="w-6 h-6 text-primary shrink-0 mt-0.5" />
             <div>
               <h3 className="font-semibold mb-2">
-                Send {order.from.amount} {order.from.currency} to the following{" "}
+                Send {order.fromAmount.toLocaleString()} {order.fromCurrency.code} to the following{" "}
                 {isBank ? "bank account" : "crypto address"}:
               </h3>
               <p className="text-sm text-muted-foreground">
@@ -137,110 +142,84 @@ export default function OrderPaymentPage() {
           {isBank ? (
             <div className="space-y-4">
               {/* Bank Name */}
-              <div className="border-b pb-4">
-                <div className="text-sm text-muted-foreground mb-1">Bank Name</div>
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{bankDetails.bankName}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => copyToClipboard(bankDetails.bankName, "bankName")}
-                  >
-                    {copied === "bankName" ? (
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                    ) : (
-                      <Copy className="w-4 h-4" />
-                    )}
-                  </Button>
+              {payoutDetails.bankName && (
+                <div className="border-b pb-4">
+                  <div className="text-sm text-muted-foreground mb-1">Bank Name</div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{payoutDetails.bankName}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyToClipboard(payoutDetails.bankName!, "bankName")}
+                    >
+                      {copied === "bankName" ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Account Name */}
-              <div className="border-b pb-4">
-                <div className="text-sm text-muted-foreground mb-1">Account Name</div>
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{bankDetails.accountName}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => copyToClipboard(bankDetails.accountName, "accountName")}
-                  >
-                    {copied === "accountName" ? (
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                    ) : (
-                      <Copy className="w-4 h-4" />
-                    )}
-                  </Button>
+              {payoutDetails.accountName && (
+                <div className="border-b pb-4">
+                  <div className="text-sm text-muted-foreground mb-1">Account Name</div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{payoutDetails.accountName}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyToClipboard(payoutDetails.accountName!, "accountName")}
+                    >
+                      {copied === "accountName" ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Account Number */}
-              <div className="border-b pb-4">
-                <div className="text-sm text-muted-foreground mb-1">Account Number</div>
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-medium">{bankDetails.accountNumber}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => copyToClipboard(bankDetails.accountNumber, "accountNumber")}
-                  >
-                    {copied === "accountNumber" ? (
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                    ) : (
-                      <Copy className="w-4 h-4" />
-                    )}
-                  </Button>
+              {payoutDetails.accountNumber && (
+                <div className="border-b pb-4">
+                  <div className="text-sm text-muted-foreground mb-1">Account Number / IBAN</div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-medium">{payoutDetails.accountNumber}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyToClipboard(payoutDetails.accountNumber!, "accountNumber")}
+                    >
+                      {copied === "accountNumber" ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-
-              {/* Routing Number */}
-              <div className="border-b pb-4">
-                <div className="text-sm text-muted-foreground mb-1">Routing Number</div>
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-medium">{bankDetails.routingNumber}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => copyToClipboard(bankDetails.routingNumber, "routingNumber")}
-                  >
-                    {copied === "routingNumber" ? (
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                    ) : (
-                      <Copy className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
+              )}
 
               {/* SWIFT */}
-              <div className="border-b pb-4">
-                <div className="text-sm text-muted-foreground mb-1">SWIFT / BIC</div>
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-medium">{bankDetails.swift}</span>
-                  <Button variant="ghost" size="sm" onClick={() => copyToClipboard(bankDetails.swift, "swift")}>
-                    {copied === "swift" ? (
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                    ) : (
-                      <Copy className="w-4 h-4" />
-                    )}
-                  </Button>
+              {payoutDetails.swift && (
+                <div className="border-b pb-4">
+                  <div className="text-sm text-muted-foreground mb-1">SWIFT / BIC</div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-medium">{payoutDetails.swift}</span>
+                    <Button variant="ghost" size="sm" onClick={() => copyToClipboard(payoutDetails.swift!, "swift")}>
+                      {copied === "swift" ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-
-              {/* IBAN */}
-              <div className="border-b pb-4">
-                <div className="text-sm text-muted-foreground mb-1">IBAN</div>
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-medium">{bankDetails.iban}</span>
-                  <Button variant="ghost" size="sm" onClick={() => copyToClipboard(bankDetails.iban, "iban")}>
-                    {copied === "iban" ? (
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                    ) : (
-                      <Copy className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
+              )}
 
               {/* Reference - Most Important */}
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900 rounded-lg p-4">
@@ -252,11 +231,11 @@ export default function OrderPaymentPage() {
                       You must include this reference in your bank transfer
                     </div>
                     <div className="flex items-center justify-between bg-card rounded p-3">
-                      <span className="font-mono font-bold text-lg">{bankDetails.reference}</span>
+                      <span className="font-mono font-bold text-lg">{order.id}</span>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => copyToClipboard(bankDetails.reference, "reference")}
+                        onClick={() => copyToClipboard(order.id, "reference")}
                       >
                         {copied === "reference" ? (
                           <CheckCircle2 className="w-4 h-4 text-green-600" />
@@ -272,20 +251,22 @@ export default function OrderPaymentPage() {
           ) : (
             <div className="space-y-4">
               {/* Crypto Network */}
-              <div className="border-b pb-4">
-                <div className="text-sm text-muted-foreground mb-1">Network</div>
-                <span className="font-medium">{cryptoDetails.network}</span>
-              </div>
+              {payoutDetails.network && (
+                <div className="border-b pb-4">
+                  <div className="text-sm text-muted-foreground mb-1">Network</div>
+                  <span className="font-medium">{payoutDetails.network}</span>
+                </div>
+              )}
 
               {/* Amount */}
               <div className="border-b pb-4">
                 <div className="text-sm text-muted-foreground mb-1">Exact Amount to Send</div>
                 <div className="flex items-center justify-between">
-                  <span className="font-mono font-medium">{cryptoDetails.amount}</span>
+                  <span className="font-mono font-medium">{order.fromAmount} {order.fromCurrency.code}</span>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => copyToClipboard(cryptoDetails.amount, "cryptoAmount")}
+                    onClick={() => copyToClipboard(order.fromAmount.toString(), "cryptoAmount")}
                   >
                     {copied === "cryptoAmount" ? (
                       <CheckCircle2 className="w-4 h-4 text-green-600" />
@@ -297,32 +278,34 @@ export default function OrderPaymentPage() {
               </div>
 
               {/* Wallet Address */}
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900 rounded-lg p-4">
-                <div className="flex items-start gap-2 mb-2">
-                  <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <div className="text-sm font-semibold mb-1">Wallet Address</div>
-                    <div className="text-xs text-muted-foreground mb-3">
-                      Send {cryptoDetails.amount} to this address only
-                    </div>
-                    <div className="flex items-center justify-between bg-card rounded p-3">
-                      <span className="font-mono text-sm break-all">{cryptoDetails.address}</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="ml-2"
-                        onClick={() => copyToClipboard(cryptoDetails.address, "cryptoAddress")}
-                      >
-                        {copied === "cryptoAddress" ? (
-                          <CheckCircle2 className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )}
-                      </Button>
+              {payoutDetails.walletAddress && (
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900 rounded-lg p-4">
+                  <div className="flex items-start gap-2 mb-2">
+                    <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="text-sm font-semibold mb-1">Wallet Address</div>
+                      <div className="text-xs text-muted-foreground mb-3">
+                        Send {order.fromAmount} {order.fromCurrency.code} to this address only
+                      </div>
+                      <div className="flex items-center justify-between bg-card rounded p-3">
+                        <span className="font-mono text-sm break-all">{payoutDetails.walletAddress}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="ml-2"
+                          onClick={() => copyToClipboard(payoutDetails.walletAddress!, "cryptoAddress")}
+                        >
+                          {copied === "cryptoAddress" ? (
+                            <CheckCircle2 className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
@@ -336,7 +319,7 @@ export default function OrderPaymentPage() {
                 1
               </span>
               <span>
-                Send {order.from.amount} {order.from.currency} using the details above
+                Send {order.fromAmount.toLocaleString()} {order.fromCurrency.code} using the details above
               </span>
             </li>
             <li className="flex gap-3">

@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { Menu, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs"
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
@@ -14,7 +15,7 @@ export function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+            <div className="w-8 h-8 rounded-none bg-primary flex items-center justify-center">
               <span className="text-primary-foreground font-bold text-lg">R</span>
             </div>
             <span className="text-xl font-semibold">RayEx</span>
@@ -38,16 +39,23 @@ export function Navbar() {
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-4">
-            <Link href="/login">
-              <Button variant="ghost">
-                Sign In
-              </Button>
-            </Link>
-            <Link href="/signup">
-              <Button>
-                Get Started
-              </Button>
-            </Link>
+            <SignedIn>
+              <Link href="/dashboard/orders">
+                <Button variant="ghost">My Orders</Button>
+              </Link>
+              <Link href="/dashboard">
+                <Button variant="ghost">Dashboard</Button>
+              </Link>
+              <UserButton afterSignOutUrl="/" />
+            </SignedIn>
+            <SignedOut>
+              <Link href="/login">
+                <Button variant="ghost">Sign In</Button>
+              </Link>
+              <Link href="/signup">
+                <Button>Get Started</Button>
+              </Link>
+            </SignedOut>
           </div>
 
           {/* Mobile Menu Button */}
@@ -97,17 +105,26 @@ export function Navbar() {
             >
               About
             </Link>
-            <div className="pt-3 space-y-2">
-              <Link href="/login" onClick={() => setIsOpen(false)}>
-                <Button variant="outline" className="w-full">
-                  Sign In
-                </Button>
-              </Link>
-              <Link href="/signup" onClick={() => setIsOpen(false)}>
-                <Button className="w-full">
-                  Get Started
-                </Button>
-              </Link>
+            <div className="pt-3 space-y-2 border-t pt-4">
+              <SignedIn>
+                <Link href="/dashboard/orders" onClick={() => setIsOpen(false)} className="block py-2">
+                  <Button variant="ghost" className="w-full justify-start">My Orders</Button>
+                </Link>
+                <Link href="/dashboard" onClick={() => setIsOpen(false)} className="block py-2">
+                  <Button variant="outline" className="w-full">Dashboard</Button>
+                </Link>
+                <div className="flex justify-center py-2">
+                  <UserButton afterSignOutUrl="/" />
+                </div>
+              </SignedIn>
+              <SignedOut>
+                <Link href="/login" onClick={() => setIsOpen(false)} className="block py-2">
+                  <Button variant="outline" className="w-full">Sign In</Button>
+                </Link>
+                <Link href="/signup" onClick={() => setIsOpen(false)} className="block py-2">
+                  <Button className="w-full">Get Started</Button>
+                </Link>
+              </SignedOut>
             </div>
           </div>
         </div>

@@ -4,9 +4,6 @@ import { useState, useMemo } from "react"
 import {
   useReactTable,
   getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
   flexRender,
   type ColumnDef,
 } from "@tanstack/react-table"
@@ -37,7 +34,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Plus, Edit2, Trash2, Search } from "lucide-react"
+import { Plus, Edit2, Trash2, Search, Loader2, AlertCircle } from "lucide-react"
+import {
+  useGetCurrenciesQuery,
+  useCreateCurrencyMutation,
+  useUpdateCurrencyMutation,
+  useDeleteCurrencyMutation,
+  useToggleCurrencyActiveMutation,
+  api
+} from "@/state/api"
+import { useSSE } from "@/hooks/useSSE"
+import { useAppDispatch } from "@/state/redux"
 
 interface Currency {
   id: string
@@ -45,99 +52,49 @@ interface Currency {
   name: string
   symbol: string
   flag: string
+  flagUrl?: string
   type: "fiat" | "crypto"
   active: boolean
   decimals: number
 }
 
-const initialCurrencies: Currency[] = [
-  {
-    id: "1",
-    code: "USD",
-    name: "US Dollar",
-    symbol: "$",
-    flag: "🇺🇸",
-    type: "fiat",
-    active: true,
-    decimals: 2,
-  },
-  {
-    id: "2",
-    code: "EUR",
-    name: "Euro",
-    symbol: "€",
-    flag: "🇪🇺",
-    type: "fiat",
-    active: true,
-    decimals: 2,
-  },
-  {
-    id: "3",
-    code: "GBP",
-    name: "British Pound",
-    symbol: "£",
-    flag: "🇬🇧",
-    type: "fiat",
-    active: true,
-    decimals: 2,
-  },
-  {
-    id: "4",
-    code: "JPY",
-    name: "Japanese Yen",
-    symbol: "¥",
-    flag: "🇯🇵",
-    type: "fiat",
-    active: true,
-    decimals: 0,
-  },
-  {
-    id: "5",
-    code: "CAD",
-    name: "Canadian Dollar",
-    symbol: "$",
-    flag: "🇨🇦",
-    type: "fiat",
-    active: true,
-    decimals: 2,
-  },
-  {
-    id: "6",
-    code: "BTC",
-    name: "Bitcoin",
-    symbol: "₿",
-    flag: "₿",
-    type: "crypto",
-    active: true,
-    decimals: 8,
-  },
-  {
-    id: "7",
-    code: "ETH",
-    name: "Ethereum",
-    symbol: "Ξ",
-    flag: "Ξ",
-    type: "crypto",
-    active: true,
-    decimals: 8,
-  },
-  {
-    id: "8",
-    code: "USDT",
-    name: "Tether",
-    symbol: "₮",
-    flag: "₮",
-    type: "crypto",
-    active: true,
-    decimals: 6,
-  },
-]
-
 export default function CurrenciesManagement() {
-  const [currencies, setCurrencies] = useState<Currency[]>(initialCurrencies)
+  const dispatch = useAppDispatch()
   const [searchQuery, setSearchQuery] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingCurrency, setEditingCurrency] = useState<Currency | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+
+  // API Queries & Mutations
+  const { data, isLoading, error } = useGetCurrenciesQuery()
+
+  // Real-time updates via SSE
+  const sseUrl = `${process.env.NEXT_PUBLIC_API_URL}/realtime/sse?role=admin`;
+
+  useSSE({
+    url: sseUrl,
+    events: {
+      currency_updated: (updatedCurrency: any) => {
+        console.log('🪙 SSE: Currency updated, refreshing list...', updatedCurrency.id)
+        dispatch(
+          api.util.updateQueryData('getCurrencies' as any, undefined, (draft: any) => {
+            if (draft && draft.data) {
+              const index = draft.data.findIndex((c: any) => c.id === updatedCurrency.id)
+              if (index !== -1) {
+                draft.data[index] = updatedCurrency
+              } else {
+                draft.data.unshift(updatedCurrency)
+              }
+            }
+          })
+        )
+      }
+    }
+  });
+  const [createCurrency, { isLoading: isCreating }] = useCreateCurrencyMutation()
+  const [updateCurrency, { isLoading: isUpdating }] = useUpdateCurrencyMutation()
+  const [deleteCurrency] = useDeleteCurrencyMutation()
+  const [toggleActiveMutation] = useToggleCurrencyActiveMutation()
 
   // Form state
   const [formData, setFormData] = useState<Partial<Currency>>({
@@ -150,6 +107,8 @@ export default function CurrenciesManagement() {
     decimals: 2,
   })
 
+  const currencies = data?.data || []
+
   const columns = useMemo<ColumnDef<Currency>[]>(
     () => [
       {
@@ -157,7 +116,15 @@ export default function CurrenciesManagement() {
         header: "Currency",
         cell: ({ row }) => (
           <div className="flex items-center gap-3">
-            <span className="text-2xl">{row.original.flag}</span>
+            {row.original.flagUrl ? (
+              <img
+                src={row.original.flagUrl}
+                alt={row.original.name}
+                className="size-8 object-contain rounded"
+              />
+            ) : (
+              <span className="text-2xl">{row.original.flag}</span>
+            )}
             <span className="font-medium">{row.getValue("name")}</span>
           </div>
         ),
@@ -234,7 +201,7 @@ export default function CurrenciesManagement() {
 
   const filteredData = useMemo(() => {
     return currencies.filter(
-      (currency) =>
+      (currency: Currency) =>
         currency.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
         currency.name.toLowerCase().includes(searchQuery.toLowerCase())
     )
@@ -244,38 +211,35 @@ export default function CurrenciesManagement() {
     data: filteredData,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (editingCurrency) {
-      // Update existing currency
-      setCurrencies(
-        currencies.map((c) =>
-          c.id === editingCurrency.id ? { ...c, ...formData } : c
-        )
-      )
-    } else {
-      // Add new currency
-      const newCurrency: Currency = {
-        id: Date.now().toString(),
-        code: formData.code || "",
-        name: formData.name || "",
-        symbol: formData.symbol || "",
-        flag: formData.flag || "",
-        type: formData.type || "fiat",
-        active: formData.active ?? true,
-        decimals: formData.decimals || 2,
+    const formDataToSubmit = new FormData()
+    Object.entries(formData).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        formDataToSubmit.append(key, value.toString())
       }
-      setCurrencies([...currencies, newCurrency])
+    })
+
+    if (selectedFile) {
+      formDataToSubmit.append("flagImage", selectedFile)
     }
 
-    // Reset form
-    resetForm()
+    try {
+      if (editingCurrency) {
+        await updateCurrency({
+          id: editingCurrency.id,
+          data: formDataToSubmit,
+        }).unwrap()
+      } else {
+        await createCurrency(formDataToSubmit).unwrap()
+      }
+      resetForm()
+    } catch (err) {
+      console.error("Failed to save currency:", err)
+    }
   }
 
   const resetForm = () => {
@@ -290,6 +254,7 @@ export default function CurrenciesManagement() {
     })
     setIsAddDialogOpen(false)
     setEditingCurrency(null)
+    setSelectedFile(null)
   }
 
   const handleEdit = (currency: Currency) => {
@@ -298,15 +263,38 @@ export default function CurrenciesManagement() {
     setIsAddDialogOpen(true)
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this currency?")) {
-      setCurrencies(currencies.filter((c) => c.id !== id))
+      try {
+        await deleteCurrency(id).unwrap()
+      } catch (err) {
+        console.error("Failed to delete currency:", err)
+      }
     }
   }
 
-  const toggleActive = (id: string) => {
-    setCurrencies(
-      currencies.map((c) => (c.id === id ? { ...c, active: !c.active } : c))
+  const toggleActive = async (id: string) => {
+    try {
+      await toggleActiveMutation(id).unwrap()
+    } catch (err) {
+      console.error("Failed to toggle currency status:", err)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="size-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-2">
+        <AlertCircle className="size-8 text-destructive" />
+        <p className="text-muted-foreground">Failed to load currencies</p>
+      </div>
     )
   }
 
@@ -386,7 +374,7 @@ export default function CurrenciesManagement() {
               </div>
 
               <div>
-                <Label htmlFor="flag">Flag/Emoji *</Label>
+                <Label htmlFor="flag">Default Emoji *</Label>
                 <Input
                   id="flag"
                   value={formData.flag}
@@ -397,6 +385,29 @@ export default function CurrenciesManagement() {
                   required
                   className="mt-1"
                 />
+              </div>
+
+              <div>
+                <Label htmlFor="flagImage">Flag Image</Label>
+                <Input
+                  id="flagImage"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) setSelectedFile(file)
+                  }}
+                  className="mt-1 pt-1.5"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Upload a high-quality flag image. Emoji will be used as fallback.
+                </p>
+                {editingCurrency?.flagUrl && !selectedFile && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <p className="text-xs text-muted-foreground">Current:</p>
+                    <img src={editingCurrency.flagUrl} alt="current" className="size-6 object-contain" />
+                  </div>
+                )}
               </div>
 
               <div>
@@ -426,7 +437,7 @@ export default function CurrenciesManagement() {
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      decimals: parseInt(e.target.value),
+                      decimals: e.target.value === "" ? 0 : parseInt(e.target.value),
                     })
                   }
                   min="0"
@@ -451,12 +462,14 @@ export default function CurrenciesManagement() {
                 <Button
                   type="button"
                   variant="outline"
+                  disabled={isCreating || isUpdating}
                   onClick={() => setIsAddDialogOpen(false)}
                   className="flex-1"
                 >
                   Cancel
                 </Button>
-                <Button type="submit" className="flex-1">
+                <Button type="submit" className="flex-1" disabled={isCreating || isUpdating}>
+                  {(isCreating || isUpdating) ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
                   {editingCurrency ? "Update" : "Add"} Currency
                 </Button>
               </div>
@@ -480,48 +493,48 @@ export default function CurrenciesManagement() {
       <div className="rounded-md border">
         <div className="overflow-x-auto">
           <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <TableHead key={header.id}>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
                           header.column.columnDef.header,
                           header.getContext()
                         )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
+                    </TableHead>
                   ))}
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  No results.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow key={row.id}>
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={columns.length}
+                    className="h-24 text-center"
+                  >
+                    No results.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
       </div>
     </div>

@@ -1,13 +1,22 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react"
 import { currentUser } from "@clerk/nextjs/server"
 
+// API_VERSION: 1.0.1
+
 // Type definitions for API responses
+export interface BaseResponse<T> {
+  success: boolean
+  data: T
+  message?: string
+}
+
 export interface Currency {
   id: string
   code: string
   name: string
   symbol: string
   flag: string
+  flagUrl?: string
   type: "fiat" | "crypto"
   decimals: number
   active: boolean
@@ -17,9 +26,12 @@ export interface Currency {
 
 export interface ExchangeRate {
   id: string
-  fromCurrency: string
-  toCurrency: string
+  fromCurrencyId: string
+  toCurrencyId: string
+  fromCurrency: Currency
+  toCurrency: Currency
   rate: number
+  previousRate?: number | null
   buyRate: number
   sellRate: number
   lastUpdated: string
@@ -27,11 +39,32 @@ export interface ExchangeRate {
   active: boolean
 }
 
+export interface CreateExchangeRateRequest {
+  fromCurrencyId: string
+  toCurrencyId: string
+  rate: number
+  buyRate?: number
+  sellRate?: number
+  autoUpdate?: boolean
+  active?: boolean
+}
+
+export interface UpdateExchangeRateRequest {
+  rate?: number
+  buyRate?: number
+  sellRate?: number
+  autoUpdate?: boolean
+  active?: boolean
+  fromCurrencyId?: string
+  toCurrencyId?: string
+}
+
 export interface PaymentMethod {
   id: string
   name: string
   type: "bank" | "crypto"
-  currency: string
+  currencyId: string
+  currency: Currency
   active: boolean
   bankName?: string
   accountName?: string
@@ -47,20 +80,41 @@ export interface PaymentMethod {
 export interface Order {
   id: string
   userId: string
-  fromCurrency: string
+  fromCurrencyId: string
+  fromCurrency: Currency
   fromAmount: number
-  toCurrency: string
+  toCurrencyId: string
+  toCurrency: Currency
   toAmount: number
   status: "pending_payment" | "payment_received" | "processing" | "completed" | "failed" | "cancelled"
-  paymentMethod: string
-  rate: number
+  paymentMethodId: string
+  paymentMethod: PaymentMethod
+  exchangeRate: number
   fee: number
   recipientName?: string
   recipientBank?: string
-  recipientAccount?: string
+  recipientAccountNumber?: string
   recipientSwift?: string
+  recipientWalletAddress?: string
+  notes?: string
   createdAt: string
   updatedAt: string
+}
+
+export interface CreateOrderRequest {
+  userEmail: string
+  fromCurrencyId: string
+  fromAmount: number
+  toCurrencyId: string
+  toAmount: number
+  paymentMethodId: string
+  recipientName?: string
+  recipientBank?: string
+  recipientAccountNumber?: string
+  recipientSwift?: string
+  recipientWalletAddress?: string
+  exchangeRate: number
+  notes?: string
 }
 
 export interface User {
@@ -78,28 +132,30 @@ export interface User {
 }
 
 // Pagination types
-export interface Pagination {
+export interface PaginationInfo {
   page: number
   limit: number
-}
-
-export interface PaginatedResponse<T> {
-  data: T[]
   total: number
-  page: number
-  limit: number
   totalPages: number
 }
 
+export interface PaginatedResponse<T> extends BaseResponse<T[]> {
+  pagination: PaginationInfo
+}
+
 // Filter types
-export interface OrderFilters extends Partial<Pagination> {
+export interface OrderFilters {
+  page?: number
+  limit?: number
   search?: string
   status?: string
   fromDate?: string
   toDate?: string
 }
 
-export interface UserFilters extends Partial<Pagination> {
+export interface UserFilters {
+  page?: number
+  limit?: number
   search?: string
   status?: string
   role?: string
@@ -146,23 +202,23 @@ export const api = createApi({
   ],
   endpoints: (build) => ({
     // ============ CURRENCIES ============
-    getCurrencies: build.query<Currency[], void>({
+    getCurrencies: build.query<BaseResponse<Currency[]>, void>({
       query: () => "currencies",
       providesTags: (result) =>
-        result
+        result?.data
           ? [
-              ...result.map(({ id }) => ({ type: "Currencies" as const, id })),
+              ...result.data.map(({ id }) => ({ type: "Currencies" as const, id })),
               { type: "Currencies", id: "LIST" },
             ]
           : [{ type: "Currencies", id: "LIST" }],
     }),
 
-    getCurrency: build.query<Currency, string>({
+    getCurrency: build.query<BaseResponse<Currency>, string>({
       query: (id) => `currencies/${id}`,
       providesTags: (result, error, id) => [{ type: "Currencies", id }],
     }),
 
-    createCurrency: build.mutation<Currency, Partial<Currency>>({
+    createCurrency: build.mutation<BaseResponse<Currency>, FormData | Partial<Currency>>({
       query: (body) => ({
         url: "currencies",
         method: "POST",
@@ -171,7 +227,7 @@ export const api = createApi({
       invalidatesTags: [{ type: "Currencies", id: "LIST" }],
     }),
 
-    updateCurrency: build.mutation<Currency, { id: string; data: Partial<Currency> }>({
+    updateCurrency: build.mutation<BaseResponse<Currency>, { id: string; data: FormData | Partial<Currency> }>({
       query: ({ id, data }) => ({
         url: `currencies/${id}`,
         method: "PUT",
@@ -183,7 +239,7 @@ export const api = createApi({
       ],
     }),
 
-    deleteCurrency: build.mutation<void, string>({
+    deleteCurrency: build.mutation<BaseResponse<void>, string>({
       query: (id) => ({
         url: `currencies/${id}`,
         method: "DELETE",
@@ -191,7 +247,7 @@ export const api = createApi({
       invalidatesTags: [{ type: "Currencies", id: "LIST" }],
     }),
 
-    toggleCurrencyActive: build.mutation<Currency, string>({
+    toggleCurrencyActive: build.mutation<BaseResponse<Currency>, string>({
       query: (id) => ({
         url: `currencies/${id}/toggle`,
         method: "POST",
@@ -200,9 +256,11 @@ export const api = createApi({
       onQueryStarted: async (id, { dispatch, queryFulfilled }) => {
         const patchResult = dispatch(
           api.util.updateQueryData("getCurrencies", undefined, (draft) => {
-            const currency = draft.find((c) => c.id === id)
-            if (currency) {
-              currency.active = !currency.active
+            if (draft?.data) {
+              const currency = draft.data.find((c) => c.id === id)
+              if (currency) {
+                currency.active = !currency.active
+              }
             }
           })
         )
@@ -216,23 +274,23 @@ export const api = createApi({
     }),
 
     // ============ EXCHANGE RATES ============
-    getExchangeRates: build.query<ExchangeRate[], void>({
+    getExchangeRates: build.query<BaseResponse<ExchangeRate[]>, void>({
       query: () => "exchange-rates",
       providesTags: (result) =>
-        result
+        result?.data
           ? [
-              ...result.map(({ id }) => ({ type: "ExchangeRates" as const, id })),
+              ...result.data.map(({ id }) => ({ type: "ExchangeRates" as const, id })),
               { type: "ExchangeRates", id: "LIST" },
             ]
           : [{ type: "ExchangeRates", id: "LIST" }],
     }),
 
-    getExchangeRate: build.query<ExchangeRate, string>({
+    getExchangeRate: build.query<BaseResponse<ExchangeRate>, string>({
       query: (id) => `exchange-rates/${id}`,
       providesTags: (result, error, id) => [{ type: "ExchangeRates", id }],
     }),
 
-    createExchangeRate: build.mutation<ExchangeRate, Partial<ExchangeRate>>({
+    createExchangeRate: build.mutation<BaseResponse<ExchangeRate>, CreateExchangeRateRequest>({
       query: (body) => ({
         url: "exchange-rates",
         method: "POST",
@@ -241,7 +299,7 @@ export const api = createApi({
       invalidatesTags: [{ type: "ExchangeRates", id: "LIST" }],
     }),
 
-    updateExchangeRate: build.mutation<ExchangeRate, { id: string; data: Partial<ExchangeRate> }>({
+    updateExchangeRate: build.mutation<BaseResponse<ExchangeRate>, { id: string; data: UpdateExchangeRateRequest }>({
       query: ({ id, data }) => ({
         url: `exchange-rates/${id}`,
         method: "PUT",
@@ -253,7 +311,7 @@ export const api = createApi({
       ],
     }),
 
-    refreshExchangeRate: build.mutation<ExchangeRate, string>({
+    refreshExchangeRate: build.mutation<BaseResponse<ExchangeRate>, string>({
       query: (id) => ({
         url: `exchange-rates/${id}/refresh`,
         method: "POST",
@@ -273,23 +331,23 @@ export const api = createApi({
     }),
 
     // ============ PAYMENT METHODS ============
-    getPaymentMethods: build.query<PaymentMethod[], void>({
+    getPaymentMethods: build.query<BaseResponse<PaymentMethod[]>, void>({
       query: () => "payment-methods",
       providesTags: (result) =>
-        result
+        result?.data
           ? [
-              ...result.map(({ id }) => ({ type: "PaymentMethods" as const, id })),
+              ...result.data.map(({ id }) => ({ type: "PaymentMethods" as const, id })),
               { type: "PaymentMethods", id: "LIST" },
             ]
           : [{ type: "PaymentMethods", id: "LIST" }],
     }),
 
-    getPaymentMethod: build.query<PaymentMethod, string>({
+    getPaymentMethod: build.query<BaseResponse<PaymentMethod>, string>({
       query: (id) => `payment-methods/${id}`,
       providesTags: (result, error, id) => [{ type: "PaymentMethods", id }],
     }),
 
-    createPaymentMethod: build.mutation<PaymentMethod, Partial<PaymentMethod>>({
+    createPaymentMethod: build.mutation<BaseResponse<PaymentMethod>, Partial<PaymentMethod>>({
       query: (body) => ({
         url: "payment-methods",
         method: "POST",
@@ -298,7 +356,7 @@ export const api = createApi({
       invalidatesTags: [{ type: "PaymentMethods", id: "LIST" }],
     }),
 
-    updatePaymentMethod: build.mutation<PaymentMethod, { id: string; data: Partial<PaymentMethod> }>({
+    updatePaymentMethod: build.mutation<BaseResponse<PaymentMethod>, { id: string; data: Partial<PaymentMethod> }>({
       query: ({ id, data }) => ({
         url: `payment-methods/${id}`,
         method: "PUT",
@@ -310,7 +368,7 @@ export const api = createApi({
       ],
     }),
 
-    deletePaymentMethod: build.mutation<void, string>({
+    deletePaymentMethod: build.mutation<BaseResponse<void>, string>({
       query: (id) => ({
         url: `payment-methods/${id}`,
         method: "DELETE",
@@ -333,12 +391,23 @@ export const api = createApi({
           : [{ type: "Orders", id: "LIST" }],
     }),
 
-    getOrder: build.query<Order, string>({
+    getUserOrders: build.query<BaseResponse<Order[]>, string>({
+      query: (email) => `orders/by-user?email=${email}`,
+      providesTags: (result) =>
+        result?.data
+          ? [
+              ...result.data.map(({ id }) => ({ type: "Orders" as const, id })),
+              { type: "Orders", id: "LIST" },
+            ]
+          : [{ type: "Orders", id: "LIST" }],
+    }),
+
+    getOrder: build.query<BaseResponse<Order>, string>({
       query: (id) => `orders/${id}`,
       providesTags: (result, error, id) => [{ type: "Orders", id }],
     }),
 
-    createOrder: build.mutation<Order, Partial<Order>>({
+    createOrder: build.mutation<BaseResponse<Order>, CreateOrderRequest>({
       query: (body) => ({
         url: "orders",
         method: "POST",
@@ -350,7 +419,7 @@ export const api = createApi({
       ],
     }),
 
-    updateOrderStatus: build.mutation<Order, { id: string; status: Order["status"]; notes?: string }>({
+    updateOrderStatus: build.mutation<BaseResponse<Order>, { id: string; status: Order["status"]; notes?: string }>({
       query: ({ id, status, notes }) => ({
         url: `orders/${id}/status`,
         method: "PUT",
@@ -360,7 +429,9 @@ export const api = createApi({
       onQueryStarted: async ({ id, status }, { dispatch, queryFulfilled }) => {
         const patchResult = dispatch(
           api.util.updateQueryData("getOrder", id, (draft) => {
-            draft.status = status
+            if (draft?.data) {
+              draft.data.status = status
+            }
           })
         )
         try {
@@ -391,12 +462,12 @@ export const api = createApi({
           : [{ type: "Users", id: "LIST" }],
     }),
 
-    getUser: build.query<User, string>({
+    getUser: build.query<BaseResponse<User>, string>({
       query: (id) => `users/${id}`,
       providesTags: (result, error, id) => [{ type: "Users", id }],
     }),
 
-    updateUserStatus: build.mutation<User, { id: string; status: User["status"] }>({
+    updateUserStatus: build.mutation<BaseResponse<User>, { id: string; status: User["status"] }>({
       query: ({ id, status }) => ({
         url: `users/${id}/status`,
         method: "PUT",
@@ -409,7 +480,7 @@ export const api = createApi({
     }),
 
     // Sync user from Clerk to database
-    syncUser: build.mutation<User, {
+    syncUser: build.mutation<BaseResponse<User>, {
       clerkId: string
       name: string
       email: string
@@ -423,11 +494,11 @@ export const api = createApi({
         body,
       }),
       invalidatesTags: (result) =>
-        result ? [{ type: "Users", id: result.id }] : [],
+        result?.data ? [{ type: "Users", id: result.data.id }] : [],
     }),
 
     // ============ ADMIN ACTIONS ============
-    suspendUser: build.mutation<User, string>({
+    suspendUser: build.mutation<BaseResponse<User>, string>({
       query: (id) => ({
         url: `admin/users/${id}/suspend`,
         method: "PUT",
@@ -435,10 +506,11 @@ export const api = createApi({
       invalidatesTags: (result, error, id) => [
         { type: "Users", id },
         { type: "Users", id: "LIST" },
+        { type: "Stats", id: "LIST" },
       ],
     }),
 
-    activateUser: build.mutation<User, string>({
+    activateUser: build.mutation<BaseResponse<User>, string>({
       query: (id) => ({
         url: `admin/users/${id}/activate`,
         method: "PUT",
@@ -446,10 +518,11 @@ export const api = createApi({
       invalidatesTags: (result, error, id) => [
         { type: "Users", id },
         { type: "Users", id: "LIST" },
+        { type: "Stats", id: "LIST" },
       ],
     }),
 
-    updateUserRole: build.mutation<User, { id: string; role: "user" | "admin" }>({
+    updateUserRole: build.mutation<BaseResponse<User>, { id: string; role: "user" | "admin" }>({
       query: ({ id, role }) => ({
         url: `admin/users/${id}/role`,
         method: "PUT",
@@ -466,7 +539,10 @@ export const api = createApi({
         url: `admin/users/${id}`,
         method: "DELETE",
       }),
-      invalidatesTags: [{ type: "Users", id: "LIST" }],
+      invalidatesTags: [
+        { type: "Users", id: "LIST" },
+        { type: "Stats", id: "LIST" },
+      ],
     }),
 
     // ============ STATS ============
@@ -504,6 +580,7 @@ export const {
 
   // Orders
   useGetOrdersQuery,
+  useGetUserOrdersQuery,
   useGetOrderQuery,
   useCreateOrderMutation,
   useUpdateOrderStatusMutation,

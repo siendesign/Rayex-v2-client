@@ -74,6 +74,8 @@ export default function LoginPage() {
           </div>
 
           <SignIn
+            fallbackRedirectUrl="/auth-callback"
+            signUpFallbackRedirectUrl="/auth-callback"
             appearance={{
               elements: {
                 formButtonPrimary:

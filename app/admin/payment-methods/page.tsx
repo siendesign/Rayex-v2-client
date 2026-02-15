@@ -28,176 +28,154 @@ import {
   Bitcoin,
   Copy,
   CheckCircle2,
+  Loader2,
+  AlertCircle,
 } from "lucide-react"
+import {
+  useGetPaymentMethodsQuery,
+  useCreatePaymentMethodMutation,
+  useUpdatePaymentMethodMutation,
+  useDeletePaymentMethodMutation,
+  useGetCurrenciesQuery
+} from "@/state/api"
 
 interface PaymentMethod {
   id: string
   type: "bank" | "crypto"
   name: string
   currency: string
+  currencyId: string
   active: boolean
-  details: {
-    bankName?: string
-    accountName?: string
-    accountNumber?: string
-    routingNumber?: string
-    swift?: string
-    iban?: string
-    walletAddress?: string
-    network?: string
-  }
+  bankName?: string
+  accountName?: string
+  accountNumber?: string
+  routingNumber?: string
+  swift?: string
+  iban?: string
+  walletAddress?: string
+  network?: string
   instructions?: string
 }
 
-const initialPaymentMethods: PaymentMethod[] = [
-  {
-    id: "1",
-    type: "bank",
-    name: "USD Bank Account",
-    currency: "USD",
-    active: true,
-    details: {
-      bankName: "XChange International Bank",
-      accountName: "XChange Ltd.",
-      accountNumber: "1234567890",
-      routingNumber: "021000021",
-      swift: "XCHGUS33",
-    },
-    instructions: "Please include your order ID in the payment reference.",
-  },
-  {
-    id: "2",
-    type: "bank",
-    name: "EUR Bank Account",
-    currency: "EUR",
-    active: true,
-    details: {
-      bankName: "Deutsche Bank AG",
-      accountName: "XChange Europe GmbH",
-      iban: "DE89 3704 0044 0532 0130 00",
-      swift: "DEUTDEFF",
-    },
-    instructions: "Include order reference in payment description.",
-  },
-  {
-    id: "3",
-    type: "crypto",
-    name: "Bitcoin Wallet",
-    currency: "BTC",
-    active: true,
-    details: {
-      walletAddress: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
-      network: "Bitcoin",
-    },
-    instructions:
-      "Send exact amount shown in order. Include order ID in memo if possible.",
-  },
-  {
-    id: "4",
-    type: "crypto",
-    name: "Ethereum Wallet",
-    currency: "ETH",
-    active: true,
-    details: {
-      walletAddress: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-      network: "Ethereum (ERC-20)",
-    },
-    instructions: "Ensure you&apos;re sending on the correct network.",
-  },
-  {
-    id: "5",
-    type: "bank",
-    name: "GBP Bank Account",
-    currency: "GBP",
-    active: true,
-    details: {
-      bankName: "Barclays Bank",
-      accountName: "XChange UK Ltd.",
-      accountNumber: "12345678",
-      swift: "BARCGB22",
-      iban: "GB29 NWBK 6016 1331 9268 19",
-    },
-    instructions: "Reference must include order number.",
-  },
-]
-
 export default function PaymentMethodsManagement() {
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(
-    initialPaymentMethods
-  )
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingMethod, setEditingMethod] = useState<PaymentMethod | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
 
+  // API Queries & Mutations
+  const { data, isLoading, error } = useGetPaymentMethodsQuery()
+  const { data: currenciesData } = useGetCurrenciesQuery()
+  const [createMethod, { isLoading: isCreating }] = useCreatePaymentMethodMutation()
+  const [updateMethod, { isLoading: isUpdating }] = useUpdatePaymentMethodMutation()
+  const [deleteMethod] = useDeletePaymentMethodMutation()
+
   const [formData, setFormData] = useState<Partial<PaymentMethod>>({
     type: "bank",
     name: "",
-    currency: "USD",
+    currencyId: "",
     active: true,
-    details: {},
+    bankName: "",
+    accountName: "",
+    accountNumber: "",
+    routingNumber: "",
+    swift: "",
+    iban: "",
+    walletAddress: "",
+    network: "",
     instructions: "",
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const paymentMethods = data?.data || []
+  const availableCurrencies = currenciesData?.data || []
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (editingMethod) {
-      setPaymentMethods(
-        paymentMethods.map((m) =>
-          m.id === editingMethod.id ? ({ ...m, ...formData } as PaymentMethod) : m
-        )
-      )
-    } else {
-      const newMethod: PaymentMethod = {
-        id: Date.now().toString(),
-        type: formData.type || "bank",
-        name: formData.name || "",
-        currency: formData.currency || "USD",
-        active: formData.active ?? true,
-        details: formData.details || {},
-        instructions: formData.instructions,
+    try {
+      if (editingMethod) {
+        await updateMethod({
+          id: editingMethod.id,
+          data: formData,
+        }).unwrap()
+      } else {
+        await createMethod(formData as any).unwrap()
       }
-      setPaymentMethods([...paymentMethods, newMethod])
+      resetForm()
+    } catch (err) {
+      console.error("Failed to save payment method:", err)
     }
-
-    resetForm()
   }
 
   const resetForm = () => {
     setFormData({
       type: "bank",
       name: "",
-      currency: "USD",
+      currencyId: "",
       active: true,
-      details: {},
+      bankName: "",
+      accountName: "",
+      accountNumber: "",
+      routingNumber: "",
+      swift: "",
+      iban: "",
+      walletAddress: "",
+      network: "",
       instructions: "",
     })
     setIsAddDialogOpen(false)
     setEditingMethod(null)
   }
 
-  const handleEdit = (method: PaymentMethod) => {
+  const handleEdit = (method: any) => {
     setEditingMethod(method)
-    setFormData(method)
+    setFormData({
+      ...method,
+    })
     setIsAddDialogOpen(true)
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this payment method?")) {
-      setPaymentMethods(paymentMethods.filter((m) => m.id !== id))
+      try {
+        await deleteMethod(id).unwrap()
+      } catch (err) {
+        console.error("Failed to delete payment method:", err)
+      }
     }
   }
 
-  const toggleActive = (id: string) => {
-    setPaymentMethods(
-      paymentMethods.map((m) => (m.id === id ? { ...m, active: !m.active } : m))
-    )
+  const toggleActive = async (method: any) => {
+    try {
+      await updateMethod({
+        id: method.id,
+        data: { active: !method.active },
+      }).unwrap()
+    } catch (err) {
+      console.error("Failed to toggle payment method status:", err)
+    }
   }
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text)
     setCopied(label)
     setTimeout(() => setCopied(null), 2000)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="size-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-2">
+        <AlertCircle className="size-8 text-destructive" />
+        <p className="text-muted-foreground">Failed to load payment methods</p>
+      </div>
+    )
   }
 
   return (
@@ -251,19 +229,23 @@ export default function PaymentMethodsManagement() {
                 </div>
                 <div>
                   <Label htmlFor="currency">Currency *</Label>
-                  <Input
-                    id="currency"
-                    value={formData.currency}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        currency: e.target.value.toUpperCase(),
-                      })
+                  <Select
+                    value={formData.currencyId}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, currencyId: value })
                     }
-                    placeholder="USD, EUR, BTC, etc."
-                    required
-                    className="mt-1"
-                  />
+                  >
+                    <SelectTrigger id="currency" className="mt-1">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableCurrencies.map((curr: any) => (
+                        <SelectItem key={curr.id} value={curr.id}>
+                          {curr.code}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -287,14 +269,11 @@ export default function PaymentMethodsManagement() {
                     <Label htmlFor="bankName">Bank Name</Label>
                     <Input
                       id="bankName"
-                      value={formData.details?.bankName || ""}
+                      value={formData.bankName || ""}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          details: {
-                            ...formData.details,
-                            bankName: e.target.value,
-                          },
+                          bankName: e.target.value,
                         })
                       }
                       placeholder="e.g., Chase Bank"
@@ -305,14 +284,11 @@ export default function PaymentMethodsManagement() {
                     <Label htmlFor="accountName">Account Name</Label>
                     <Input
                       id="accountName"
-                      value={formData.details?.accountName || ""}
+                      value={formData.accountName || ""}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          details: {
-                            ...formData.details,
-                            accountName: e.target.value,
-                          },
+                          accountName: e.target.value,
                         })
                       }
                       placeholder="e.g., XChange Ltd."
@@ -324,14 +300,11 @@ export default function PaymentMethodsManagement() {
                       <Label htmlFor="accountNumber">Account Number</Label>
                       <Input
                         id="accountNumber"
-                        value={formData.details?.accountNumber || ""}
+                        value={formData.accountNumber || ""}
                         onChange={(e) =>
                           setFormData({
                             ...formData,
-                            details: {
-                              ...formData.details,
-                              accountNumber: e.target.value,
-                            },
+                            accountNumber: e.target.value,
                           })
                         }
                         placeholder="1234567890"
@@ -342,14 +315,11 @@ export default function PaymentMethodsManagement() {
                       <Label htmlFor="routingNumber">Routing Number</Label>
                       <Input
                         id="routingNumber"
-                        value={formData.details?.routingNumber || ""}
+                        value={formData.routingNumber || ""}
                         onChange={(e) =>
                           setFormData({
                             ...formData,
-                            details: {
-                              ...formData.details,
-                              routingNumber: e.target.value,
-                            },
+                            routingNumber: e.target.value,
                           })
                         }
                         placeholder="021000021"
@@ -362,14 +332,11 @@ export default function PaymentMethodsManagement() {
                       <Label htmlFor="swift">SWIFT/BIC</Label>
                       <Input
                         id="swift"
-                        value={formData.details?.swift || ""}
+                        value={formData.swift || ""}
                         onChange={(e) =>
                           setFormData({
                             ...formData,
-                            details: {
-                              ...formData.details,
-                              swift: e.target.value,
-                            },
+                            swift: e.target.value,
                           })
                         }
                         placeholder="CHASUS33"
@@ -380,14 +347,11 @@ export default function PaymentMethodsManagement() {
                       <Label htmlFor="iban">IBAN</Label>
                       <Input
                         id="iban"
-                        value={formData.details?.iban || ""}
+                        value={formData.iban || ""}
                         onChange={(e) =>
                           setFormData({
                             ...formData,
-                            details: {
-                              ...formData.details,
-                              iban: e.target.value,
-                            },
+                            iban: e.target.value,
                           })
                         }
                         placeholder="DE89 3704 0044..."
@@ -402,14 +366,11 @@ export default function PaymentMethodsManagement() {
                     <Label htmlFor="walletAddress">Wallet Address *</Label>
                     <Input
                       id="walletAddress"
-                      value={formData.details?.walletAddress || ""}
+                      value={formData.walletAddress || ""}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          details: {
-                            ...formData.details,
-                            walletAddress: e.target.value,
-                          },
+                          walletAddress: e.target.value,
                         })
                       }
                       placeholder="0x..."
@@ -421,14 +382,11 @@ export default function PaymentMethodsManagement() {
                     <Label htmlFor="network">Network</Label>
                     <Input
                       id="network"
-                      value={formData.details?.network || ""}
+                      value={formData.network || ""}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          details: {
-                            ...formData.details,
-                            network: e.target.value,
-                          },
+                          network: e.target.value,
                         })
                       }
                       placeholder="e.g., Ethereum (ERC-20)"
@@ -467,12 +425,14 @@ export default function PaymentMethodsManagement() {
                 <Button
                   type="button"
                   variant="outline"
+                  disabled={isCreating || isUpdating}
                   onClick={() => setIsAddDialogOpen(false)}
                   className="flex-1"
                 >
                   Cancel
                 </Button>
-                <Button type="submit" className="flex-1">
+                <Button type="submit" className="flex-1" disabled={isCreating || isUpdating}>
+                  {(isCreating || isUpdating) ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
                   {editingMethod ? "Update" : "Add"} Payment Method
                 </Button>
               </div>
@@ -483,14 +443,13 @@ export default function PaymentMethodsManagement() {
 
       {/* Payment Methods Grid */}
       <div className="grid md:grid-cols-2 gap-4 md:gap-6">
-        {paymentMethods.map((method) => (
+        {paymentMethods.map((method: any) => (
           <div key={method.id} className="border rounded-lg p-6">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div
-                  className={`size-12 rounded-lg flex items-center justify-center ${
-                    method.type === "bank" ? "bg-blue-100" : "bg-purple-100"
-                  }`}
+                  className={`size-12 rounded-lg flex items-center justify-center ${method.type === "bank" ? "bg-blue-100" : "bg-purple-100"
+                    }`}
                 >
                   {method.type === "bank" ? (
                     <Building2 className="size-6 text-blue-600" />
@@ -500,35 +459,35 @@ export default function PaymentMethodsManagement() {
                 </div>
                 <div>
                   <h3 className="font-semibold">{method.name}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {method.currency}
+                  <p className="text-sm text-muted-foreground uppercase">
+                    {method.currency?.code || method.currencyId}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <Switch
                   checked={method.active}
-                  onCheckedChange={() => toggleActive(method.id)}
+                  onCheckedChange={() => toggleActive(method)}
                 />
               </div>
             </div>
 
-            <div className="space-y-3 mb-4">
+            <div className="space-y-3 mb-4 min-h-[160px]">
               {method.type === "bank" ? (
                 <>
-                  {method.details.bankName && (
+                  {method.bankName && (
                     <div>
                       <Label className="text-xs text-muted-foreground">
                         Bank Name
                       </Label>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm">{method.details.bankName}</span>
+                        <span className="text-sm">{method.bankName}</span>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() =>
                             copyToClipboard(
-                              method.details.bankName!,
+                              method.bankName!,
                               `${method.id}-bank`
                             )
                           }
@@ -542,29 +501,29 @@ export default function PaymentMethodsManagement() {
                       </div>
                     </div>
                   )}
-                  {method.details.accountName && (
+                  {method.accountName && (
                     <div>
                       <Label className="text-xs text-muted-foreground">
                         Account Name
                       </Label>
-                      <div className="text-sm">{method.details.accountName}</div>
+                      <div className="text-sm">{method.accountName}</div>
                     </div>
                   )}
-                  {method.details.accountNumber && (
+                  {method.accountNumber && (
                     <div>
                       <Label className="text-xs text-muted-foreground">
                         Account Number
                       </Label>
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-mono">
-                          {method.details.accountNumber}
+                          {method.accountNumber}
                         </span>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() =>
                             copyToClipboard(
-                              method.details.accountNumber!,
+                              method.accountNumber!,
                               `${method.id}-account`
                             )
                           }
@@ -578,52 +537,42 @@ export default function PaymentMethodsManagement() {
                       </div>
                     </div>
                   )}
-                  {method.details.swift && (
+                  {method.swift && (
                     <div>
                       <Label className="text-xs text-muted-foreground">
                         SWIFT/BIC
                       </Label>
                       <div className="text-sm font-mono">
-                        {method.details.swift}
-                      </div>
-                    </div>
-                  )}
-                  {method.details.iban && (
-                    <div>
-                      <Label className="text-xs text-muted-foreground">
-                        IBAN
-                      </Label>
-                      <div className="text-sm font-mono">
-                        {method.details.iban}
+                        {method.swift}
                       </div>
                     </div>
                   )}
                 </>
               ) : (
                 <>
-                  {method.details.network && (
+                  {method.network && (
                     <div>
                       <Label className="text-xs text-muted-foreground">
                         Network
                       </Label>
-                      <div className="text-sm">{method.details.network}</div>
+                      <div className="text-sm">{method.network}</div>
                     </div>
                   )}
-                  {method.details.walletAddress && (
+                  {method.walletAddress && (
                     <div>
                       <Label className="text-xs text-muted-foreground">
                         Wallet Address
                       </Label>
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-mono truncate">
-                          {method.details.walletAddress.substring(0, 20)}...
+                          {method.walletAddress.substring(0, 20)}...
                         </span>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() =>
                             copyToClipboard(
-                              method.details.walletAddress!,
+                              method.walletAddress!,
                               `${method.id}-wallet`
                             )
                           }
@@ -642,7 +591,7 @@ export default function PaymentMethodsManagement() {
             </div>
 
             {method.instructions && (
-              <div className="mb-4 p-3 bg-muted rounded text-xs text-muted-foreground">
+              <div className="mb-4 p-3 bg-muted rounded text-xs text-muted-foreground line-clamp-2">
                 {method.instructions}
               </div>
             )}

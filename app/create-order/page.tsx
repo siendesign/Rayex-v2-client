@@ -1,35 +1,54 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowRightLeft, ArrowLeft, Info, Bitcoin, Building2, ChevronRight } from "lucide-react"
+import { ArrowRightLeft, ArrowLeft, Info, Bitcoin, Building2, ChevronRight, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import Image from "next/image"
 
-const currencies = [
-  { code: "USD", name: "US Dollar", flag: "🇺🇸", type: "fiat" },
-  { code: "EUR", name: "Euro", flag: "🇪🇺", type: "fiat" },
-  { code: "GBP", name: "British Pound", flag: "🇬🇧", type: "fiat" },
-  { code: "JPY", name: "Japanese Yen", flag: "🇯🇵", type: "fiat" },
-  { code: "CAD", name: "Canadian Dollar", flag: "🇨🇦", type: "fiat" },
-  { code: "BTC", name: "Bitcoin", flag: "₿", type: "crypto" },
-  { code: "ETH", name: "Ethereum", flag: "Ξ", type: "crypto" },
-  { code: "USDT", name: "Tether", flag: "₮", type: "crypto" },
-]
+import { useSearchParams } from "next/navigation"
+import { Suspense } from "react"
+import { useUser } from "@clerk/nextjs"
+import {
+  useGetCurrenciesQuery,
+  useGetExchangeRatesQuery,
+  useGetPaymentMethodsQuery,
+  useCreateOrderMutation
+} from "@/state/api"
 
-export default function CreateOrderPage() {
+function CreateOrderContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const { user } = useUser()
   const [step, setStep] = useState(1)
   const [paymentMethod, setPaymentMethod] = useState<"bank" | "crypto">("bank")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const { data: currenciesData, isLoading: currenciesLoading } = useGetCurrenciesQuery()
+  const { data: ratesData, isLoading: ratesLoading } = useGetExchangeRatesQuery()
+  const { data: payoutMethodsData } = useGetPaymentMethodsQuery()
+  const [createOrderMutation] = useCreateOrderMutation()
 
   // Exchange details
   const [fromCurrency, setFromCurrency] = useState("USD")
   const [toCurrency, setToCurrency] = useState("EUR")
   const [amount, setAmount] = useState("1000")
+
+  // Initialize from search params
+  useEffect(() => {
+    const from = searchParams.get("from")
+    const to = searchParams.get("to")
+    const amt = searchParams.get("amount")
+
+    if (from) setFromCurrency(from)
+    if (to) setToCurrency(to)
+    if (amt) setAmount(amt)
+  }, [searchParams])
 
   // Recipient details
   const [recipientName, setRecipientName] = useState("")
@@ -37,19 +56,105 @@ export default function CreateOrderPage() {
   const [recipientAccount, setRecipientAccount] = useState("")
   const [recipientSwift, setRecipientSwift] = useState("")
 
-  const rate = 0.92
-  const fee = parseFloat(amount) * 0.005 // 0.5% fee
-  const convertedAmount = (parseFloat(amount) || 0) * rate - fee
+  const currencies = currenciesData?.data || []
+  const exchangeRates = ratesData?.data || []
+  const payoutMethods = payoutMethodsData?.data || []
 
-  const handleSubmit = () => {
-    // Create order logic here
-    console.log("Order created")
-    // Navigate to payment instructions page
-    router.push("/order-payment/ORD-2024-001")
+  // Get valid to-currencies for the selected from-currency
+  const validToCurrencyCodes = exchangeRates
+    .filter((r) => r.fromCurrency.code === fromCurrency && r.active)
+    .map((r) => r.toCurrency.code)
+
+  const validToCurrencies = currencies.filter((c) =>
+    validToCurrencyCodes.includes(c.code)
+  )
+
+  // Auto-switch toCurrency if it's no longer valid
+  useEffect(() => {
+    if (validToCurrencyCodes.length > 0 && !validToCurrencyCodes.includes(toCurrency)) {
+      setToCurrency(validToCurrencyCodes[0])
+    }
+  }, [fromCurrency, validToCurrencyCodes, toCurrency])
+
+  const getExchangeRate = () => {
+    const rateItem = exchangeRates.find(
+      (r) => r.fromCurrency.code === fromCurrency && r.toCurrency.code === toCurrency
+    )
+    return rateItem ? rateItem.sellRate : 1
+  }
+
+  const rate = getExchangeRate()
+  const toCurrencyObj = currencies.find(c => c.code === toCurrency)
+  const convertedAmount = (parseFloat(amount) || 0) / rate
+
+  const handleSubmit = async () => {
+    if (!user?.primaryEmailAddress?.emailAddress) {
+      alert("Please sign in to create an order")
+      return
+    }
+
+    const fromCurrencyObj = currencies.find(c => c.code === fromCurrency)
+    if (!fromCurrencyObj || !toCurrencyObj) {
+      alert("Invalid currencies selected")
+      return
+    }
+
+    // Find a payment method for the "from" currency and matching type (bank/crypto)
+    const selectedPayoutMethod = payoutMethods.find(
+      pm => pm.currencyId === fromCurrencyObj.id && pm.type === paymentMethod && pm.active
+    )
+
+    if (!selectedPayoutMethod) {
+      alert(`No active ${paymentMethod} payment method found. Please contact support.`)
+      return
+    }
+
+    try {
+      setIsSubmitting(true)
+      const orderData = {
+        userEmail: user.primaryEmailAddress.emailAddress,
+        fromCurrencyId: fromCurrencyObj.id,
+        fromAmount: parseFloat(amount),
+        toCurrencyId: toCurrencyObj.id,
+        toAmount: convertedAmount,
+        paymentMethodId: selectedPayoutMethod.id,
+        recipientName,
+        recipientBank,
+        recipientAccountNumber: recipientAccount,
+        recipientSwift,
+        exchangeRate: rate,
+      }
+
+      const response = await createOrderMutation(orderData).unwrap()
+
+      if (response.success) {
+        // Navigate to payment instructions page with the new order ID
+        router.push(`/order-payment/${response.data.id}`)
+      }
+    } catch (err: any) {
+      console.error("Failed to create order:", err)
+      alert(err.data?.message || "Failed to create order. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const isLoading = currenciesLoading || ratesLoading
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-muted/30 flex items-center justify-center">
+        <div className="flex flex-col items-center">
+          <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground">Loading exchange data...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-muted/30">
+      {/* ... rest of the JSX ... */}
       {/* Header */}
       <div className="bg-card border-b">
         <div className="max-w-4xl mx-auto px-4 py-4">
@@ -77,9 +182,8 @@ export default function CreateOrderPage() {
               <div key={s} className="flex items-center flex-1">
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold ${
-                      step >= s ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                    }`}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold ${step >= s ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                      }`}
                   >
                     {s}
                   </div>
@@ -117,11 +221,10 @@ export default function CreateOrderPage() {
                 >
                   <div className="grid md:grid-cols-2 gap-4">
                     <div
-                      className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${
-                        paymentMethod === "bank"
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
-                      }`}
+                      className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${paymentMethod === "bank"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50"
+                        }`}
                     >
                       <RadioGroupItem value="bank" id="bank" className="sr-only" />
                       <label htmlFor="bank" className="cursor-pointer flex items-start gap-3">
@@ -136,11 +239,10 @@ export default function CreateOrderPage() {
                     </div>
 
                     <div
-                      className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${
-                        paymentMethod === "crypto"
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
-                      }`}
+                      className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${paymentMethod === "crypto"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50"
+                        }`}
                     >
                       <RadioGroupItem value="crypto" id="crypto" className="sr-only" />
                       <label htmlFor="crypto" className="cursor-pointer flex items-start gap-3">
@@ -172,17 +274,28 @@ export default function CreateOrderPage() {
                     placeholder="0.00"
                   />
                   <Select value={fromCurrency} onValueChange={setFromCurrency}>
-                    <SelectTrigger className="w-40 h-14">
+                    <SelectTrigger className="w-44 h-14">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {currencies
                         .filter((c) => (paymentMethod === "crypto" ? c.type === "crypto" : c.type === "fiat"))
                         .map((currency) => (
-                          <SelectItem key={currency.code} value={currency.code}>
+                          <SelectItem key={currency.id} value={currency.code}>
                             <div className="flex items-center gap-2">
-                              <span className="text-lg">{currency.flag}</span>
-                              <span>{currency.code}</span>
+                              {currency.flagUrl ? (
+                                <div className="relative w-6 h-4 overflow-hidden rounded-sm border border-muted-foreground/20">
+                                  <Image
+                                    src={currency.flagUrl}
+                                    alt={currency.name}
+                                    fill
+                                    className="object-cover"
+                                  />
+                                </div>
+                              ) : (
+                                <span className="text-lg">{currency.flag}</span>
+                              )}
+                              <span className="font-medium">{currency.code}</span>
                             </div>
                           </SelectItem>
                         ))}
@@ -193,9 +306,21 @@ export default function CreateOrderPage() {
 
               {/* Swap Icon */}
               <div className="flex justify-center">
-                <div className="p-3 rounded-full bg-muted">
+                <button
+                  className="p-3 rounded-full bg-muted cursor-pointer hover:bg-muted/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!exchangeRates.some(r => r.fromCurrency.code === toCurrency && r.toCurrency.code === fromCurrency && r.active)}
+                  onClick={() => {
+                    const reversePairExists = exchangeRates.some(
+                      (r) => r.fromCurrency.code === toCurrency && r.toCurrency.code === fromCurrency && r.active
+                    );
+                    if (reversePairExists) {
+                      setFromCurrency(toCurrency);
+                      setToCurrency(fromCurrency);
+                    }
+                  }}
+                >
                   <ArrowRightLeft className="w-5 h-5" />
-                </div>
+                </button>
               </div>
 
               {/* To Currency */}
@@ -207,25 +332,37 @@ export default function CreateOrderPage() {
                   <Input
                     id="to-amount"
                     type="text"
-                    value={convertedAmount.toFixed(2)}
+                    value={convertedAmount.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2
+                    })}
                     readOnly
                     className="flex-1 h-14 text-lg bg-muted"
                   />
                   <Select value={toCurrency} onValueChange={setToCurrency}>
-                    <SelectTrigger className="w-40 h-14">
+                    <SelectTrigger className="w-44 h-14">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {currencies
-                        .filter((c) => c.type === "fiat")
-                        .map((currency) => (
-                          <SelectItem key={currency.code} value={currency.code}>
-                            <div className="flex items-center gap-2">
+                      {validToCurrencies.map((currency) => (
+                        <SelectItem key={currency.id} value={currency.code}>
+                          <div className="flex items-center gap-2">
+                            {currency.flagUrl ? (
+                              <div className="relative w-6 h-4 overflow-hidden rounded-sm border border-muted-foreground/20">
+                                <Image
+                                  src={currency.flagUrl}
+                                  alt={currency.name}
+                                  fill
+                                  className="object-cover"
+                                />
+                              </div>
+                            ) : (
                               <span className="text-lg">{currency.flag}</span>
-                              <span>{currency.code}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
+                            )}
+                            <span className="font-medium">{currency.code}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -239,19 +376,13 @@ export default function CreateOrderPage() {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Exchange rate</span>
                       <span className="font-medium">
-                        1 {fromCurrency} = {rate} {toCurrency}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Our fee (0.5%)</span>
-                      <span className="font-medium">
-                        {fee.toFixed(2)} {toCurrency}
+                        1 {toCurrency} = {rate.toFixed(4)} {fromCurrency}
                       </span>
                     </div>
                     <div className="flex justify-between pt-2 border-t border-primary/20">
-                      <span className="font-semibold">Total to recipient</span>
-                      <span className="font-bold">
-                        {convertedAmount.toFixed(2)} {toCurrency}
+                      <span className="font-semibold">Recipient gets</span>
+                      <span className="font-bold text-lg">
+                        {(convertedAmount || 0).toFixed(2)} {toCurrency}
                       </span>
                     </div>
                   </div>
@@ -350,19 +481,16 @@ export default function CreateOrderPage() {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Recipient receives</span>
                       <span className="font-medium">
-                        {convertedAmount.toFixed(2)} {toCurrency}
+                        {convertedAmount.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2
+                        })} {toCurrency}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Exchange rate</span>
                       <span className="font-medium">
-                        1 {fromCurrency} = {rate} {toCurrency}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Fee</span>
-                      <span className="font-medium">
-                        {fee.toFixed(2)} {toCurrency}
+                        1 {toCurrency} = {rate.toFixed(4)} {fromCurrency}
                       </span>
                     </div>
                   </div>
@@ -416,13 +544,34 @@ export default function CreateOrderPage() {
                 <ArrowLeft className="w-5 h-5 mr-2" />
                 Back
               </Button>
-              <Button onClick={handleSubmit} className="flex-1 h-12">
-                Create Order
+              <Button onClick={handleSubmit} className="flex-1 h-12" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                    Creating Order...
+                  </>
+                ) : (
+                  "Create Order"
+                )}
               </Button>
             </div>
           </div>
         )}
       </div>
     </div>
+  )
+}
+
+export default function CreateOrderPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-muted/30 flex items-center justify-center">
+          <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <CreateOrderContent />
+    </Suspense>
   )
 }
