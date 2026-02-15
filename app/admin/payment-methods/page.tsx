@@ -1,25 +1,25 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   Plus,
   Edit2,
@@ -30,44 +30,31 @@ import {
   CheckCircle2,
   Loader2,
   AlertCircle,
-} from "lucide-react"
+} from "lucide-react";
 import {
   useGetPaymentMethodsQuery,
   useCreatePaymentMethodMutation,
   useUpdatePaymentMethodMutation,
   useDeletePaymentMethodMutation,
-  useGetCurrenciesQuery
-} from "@/state/api"
-
-interface PaymentMethod {
-  id: string
-  type: "bank" | "crypto"
-  name: string
-  currency: string
-  currencyId: string
-  active: boolean
-  bankName?: string
-  accountName?: string
-  accountNumber?: string
-  routingNumber?: string
-  swift?: string
-  iban?: string
-  walletAddress?: string
-  network?: string
-  instructions?: string
-}
+  useGetCurrenciesQuery,
+  type PaymentMethod,
+} from "@/state/api";
 
 export default function PaymentMethodsManagement() {
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [editingMethod, setEditingMethod] = useState<PaymentMethod | null>(null)
-  const [copied, setCopied] = useState<string | null>(null)
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [editingMethod, setEditingMethod] = useState<PaymentMethod | null>(
+    null,
+  );
+  const [copied, setCopied] = useState<string | null>(null);
 
   // API Queries & Mutations
-  const { data, isLoading, error } = useGetPaymentMethodsQuery()
-  const { data: currenciesData } = useGetCurrenciesQuery()
-  const [createMethod, { isLoading: isCreating }] = useCreatePaymentMethodMutation()
-  const [updateMethod, { isLoading: isUpdating }] = useUpdatePaymentMethodMutation()
-  const [deleteMethod] = useDeletePaymentMethodMutation()
+  const { data, isLoading, error } = useGetPaymentMethodsQuery();
+  const { data: currenciesData } = useGetCurrenciesQuery();
+  const [createMethod, { isLoading: isCreating }] =
+    useCreatePaymentMethodMutation();
+  const [updateMethod, { isLoading: isUpdating }] =
+    useUpdatePaymentMethodMutation();
+  const [deleteMethod] = useDeletePaymentMethodMutation();
 
   const [formData, setFormData] = useState<Partial<PaymentMethod>>({
     type: "bank",
@@ -83,28 +70,28 @@ export default function PaymentMethodsManagement() {
     walletAddress: "",
     network: "",
     instructions: "",
-  })
+  });
 
-  const paymentMethods = data?.data || []
-  const availableCurrencies = currenciesData?.data || []
+  const paymentMethods = data?.data || [];
+  const availableCurrencies = currenciesData?.data || [];
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
     try {
       if (editingMethod) {
         await updateMethod({
           id: editingMethod.id,
           data: formData,
-        }).unwrap()
+        }).unwrap();
       } else {
-        await createMethod(formData as any).unwrap()
+        await createMethod(formData as any).unwrap();
       }
-      resetForm()
+      resetForm();
     } catch (err) {
-      console.error("Failed to save payment method:", err)
+      console.error("Failed to save payment method:", err);
     }
-  }
+  };
 
   const resetForm = () => {
     setFormData({
@@ -121,52 +108,52 @@ export default function PaymentMethodsManagement() {
       walletAddress: "",
       network: "",
       instructions: "",
-    })
-    setIsAddDialogOpen(false)
-    setEditingMethod(null)
-  }
+    });
+    setIsAddDialogOpen(false);
+    setEditingMethod(null);
+  };
 
   const handleEdit = (method: any) => {
-    setEditingMethod(method)
+    setEditingMethod(method);
     setFormData({
       ...method,
-    })
-    setIsAddDialogOpen(true)
-  }
+    });
+    setIsAddDialogOpen(true);
+  };
 
   const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this payment method?")) {
       try {
-        await deleteMethod(id).unwrap()
+        await deleteMethod(id).unwrap();
       } catch (err) {
-        console.error("Failed to delete payment method:", err)
+        console.error("Failed to delete payment method:", err);
       }
     }
-  }
+  };
 
   const toggleActive = async (method: any) => {
     try {
       await updateMethod({
         id: method.id,
         data: { active: !method.active },
-      }).unwrap()
+      }).unwrap();
     } catch (err) {
-      console.error("Failed to toggle payment method status:", err)
+      console.error("Failed to toggle payment method status:", err);
     }
-  }
+  };
 
   const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text)
-    setCopied(label)
-    setTimeout(() => setCopied(null), 2000)
-  }
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 2000);
+  };
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="size-8 animate-spin text-primary" />
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -175,7 +162,7 @@ export default function PaymentMethodsManagement() {
         <AlertCircle className="size-8 text-destructive" />
         <p className="text-muted-foreground">Failed to load payment methods</p>
       </div>
-    )
+    );
   }
 
   return (
@@ -192,8 +179,8 @@ export default function PaymentMethodsManagement() {
           <DialogTrigger asChild>
             <Button
               onClick={() => {
-                setEditingMethod(null)
-                resetForm()
+                setEditingMethod(null);
+                resetForm();
               }}
             >
               <Plus className="size-4 mr-2" />
@@ -215,7 +202,10 @@ export default function PaymentMethodsManagement() {
                   <Select
                     value={formData.type}
                     onValueChange={(value) =>
-                      setFormData({ ...formData, type: value as "bank" | "crypto" })
+                      setFormData({
+                        ...formData,
+                        type: value as "bank" | "crypto",
+                      })
                     }
                   >
                     <SelectTrigger id="type" className="mt-1">
@@ -431,8 +421,14 @@ export default function PaymentMethodsManagement() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" className="flex-1" disabled={isCreating || isUpdating}>
-                  {(isCreating || isUpdating) ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+                <Button
+                  type="submit"
+                  className="flex-1"
+                  disabled={isCreating || isUpdating}
+                >
+                  {isCreating || isUpdating ? (
+                    <Loader2 className="size-4 animate-spin mr-2" />
+                  ) : null}
                   {editingMethod ? "Update" : "Add"} Payment Method
                 </Button>
               </div>
@@ -448,8 +444,9 @@ export default function PaymentMethodsManagement() {
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div
-                  className={`size-12 rounded-lg flex items-center justify-center ${method.type === "bank" ? "bg-blue-100" : "bg-purple-100"
-                    }`}
+                  className={`size-12 rounded-lg flex items-center justify-center ${
+                    method.type === "bank" ? "bg-blue-100" : "bg-purple-100"
+                  }`}
                 >
                   {method.type === "bank" ? (
                     <Building2 className="size-6 text-blue-600" />
@@ -488,7 +485,7 @@ export default function PaymentMethodsManagement() {
                           onClick={() =>
                             copyToClipboard(
                               method.bankName!,
-                              `${method.id}-bank`
+                              `${method.id}-bank`,
                             )
                           }
                         >
@@ -524,7 +521,7 @@ export default function PaymentMethodsManagement() {
                           onClick={() =>
                             copyToClipboard(
                               method.accountNumber!,
-                              `${method.id}-account`
+                              `${method.id}-account`,
                             )
                           }
                         >
@@ -542,9 +539,7 @@ export default function PaymentMethodsManagement() {
                       <Label className="text-xs text-muted-foreground">
                         SWIFT/BIC
                       </Label>
-                      <div className="text-sm font-mono">
-                        {method.swift}
-                      </div>
+                      <div className="text-sm font-mono">{method.swift}</div>
                     </div>
                   )}
                 </>
@@ -573,7 +568,7 @@ export default function PaymentMethodsManagement() {
                           onClick={() =>
                             copyToClipboard(
                               method.walletAddress!,
-                              `${method.id}-wallet`
+                              `${method.id}-wallet`,
                             )
                           }
                         >
@@ -620,5 +615,5 @@ export default function PaymentMethodsManagement() {
         ))}
       </div>
     </div>
-  )
+  );
 }
