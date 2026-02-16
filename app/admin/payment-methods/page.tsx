@@ -37,8 +37,25 @@ import {
   useUpdatePaymentMethodMutation,
   useDeletePaymentMethodMutation,
   useGetCurrenciesQuery,
-  type PaymentMethod,
 } from "@/state/api";
+
+interface PaymentMethod {
+  id: string;
+  type: "bank" | "crypto";
+  name: string;
+  currency: string;
+  currencyId: string;
+  active: boolean;
+  bankName?: string;
+  accountName?: string;
+  accountNumber?: string;
+  routingNumber?: string;
+  swift?: string;
+  iban?: string;
+  walletAddress?: string;
+  network?: string;
+  instructions?: string;
+}
 
 export default function PaymentMethodsManagement() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
