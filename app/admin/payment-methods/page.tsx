@@ -30,6 +30,7 @@ import {
   CheckCircle2,
   Loader2,
   AlertCircle,
+  QrCode,
 } from "lucide-react";
 import {
   useGetPaymentMethodsQuery,
@@ -41,7 +42,7 @@ import {
 
 interface PaymentMethod {
   id: string;
-  type: "bank" | "crypto";
+  type: "bank" | "crypto" | "qr";
   name: string;
   currency: string;
   currencyId: string;
@@ -54,6 +55,7 @@ interface PaymentMethod {
   iban?: string;
   walletAddress?: string;
   network?: string;
+  qrCodeUrl?: string;
   instructions?: string;
 }
 
@@ -63,6 +65,7 @@ export default function PaymentMethodsManagement() {
     null,
   );
   const [copied, setCopied] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   // API Queries & Mutations
   const { data, isLoading, error } = useGetPaymentMethodsQuery();
@@ -86,6 +89,7 @@ export default function PaymentMethodsManagement() {
     iban: "",
     walletAddress: "",
     network: "",
+    qrCodeUrl: "",
     instructions: "",
   });
 
@@ -96,13 +100,25 @@ export default function PaymentMethodsManagement() {
     e.preventDefault();
 
     try {
+      let payload: any = formData;
+
+      if (formData.type === "qr" && imageFile) {
+        payload = new FormData();
+        Object.entries(formData).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            payload.append(key, value.toString());
+          }
+        });
+        payload.append("qrCodeImage", imageFile);
+      }
+
       if (editingMethod) {
         await updateMethod({
           id: editingMethod.id,
-          data: formData,
+          data: payload,
         }).unwrap();
       } else {
-        await createMethod(formData as any).unwrap();
+        await createMethod(payload).unwrap();
       }
       resetForm();
     } catch (err) {
@@ -124,8 +140,10 @@ export default function PaymentMethodsManagement() {
       iban: "",
       walletAddress: "",
       network: "",
+      qrCodeUrl: "",
       instructions: "",
     });
+    setImageFile(null);
     setIsAddDialogOpen(false);
     setEditingMethod(null);
   };
@@ -134,6 +152,16 @@ export default function PaymentMethodsManagement() {
     setEditingMethod(method);
     setFormData({
       ...method,
+      bankName: method.bankName || "",
+      accountName: method.accountName || "",
+      accountNumber: method.accountNumber || "",
+      routingNumber: method.routingNumber || "",
+      swift: method.swift || "",
+      iban: method.iban || "",
+      walletAddress: method.walletAddress || "",
+      network: method.network || "",
+      qrCodeUrl: method.qrCodeUrl || "",
+      instructions: method.instructions || "",
     });
     setIsAddDialogOpen(true);
   };
@@ -231,6 +259,9 @@ export default function PaymentMethodsManagement() {
                     <SelectContent>
                       <SelectItem value="bank">Bank Account</SelectItem>
                       <SelectItem value="crypto">Cryptocurrency</SelectItem>
+                      <SelectItem value="qr">
+                        QR Code (e.g. Alipay/WeChat)
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -367,7 +398,7 @@ export default function PaymentMethodsManagement() {
                     </div>
                   </div>
                 </>
-              ) : (
+              ) : formData.type === "crypto" ? (
                 <>
                   <div>
                     <Label htmlFor="walletAddress">Wallet Address *</Label>
@@ -400,6 +431,39 @@ export default function PaymentMethodsManagement() {
                       className="mt-1"
                     />
                   </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <Label htmlFor="qrImage">QR Code Image *</Label>
+                    <Input
+                      id="qrImage"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          setImageFile(e.target.files[0]);
+                        }
+                      }}
+                      required={!editingMethod || !editingMethod.qrCodeUrl}
+                      className="mt-1"
+                    />
+                  </div>
+                  {(imageFile || editingMethod?.qrCodeUrl) && (
+                    <div className="mt-4 flex justify-center">
+                      <div className="h-32 w-32 md:h-40 md:w-40 rounded-lg border-2 border-dashed flex items-center justify-center p-2 bg-muted/30 overflow-hidden">
+                        <img
+                          src={
+                            imageFile
+                              ? URL.createObjectURL(imageFile)
+                              : editingMethod?.qrCodeUrl
+                          }
+                          alt="QR Code Preview"
+                          className="h-full w-full object-contain mix-blend-multiply opacity-90"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 
@@ -462,13 +526,19 @@ export default function PaymentMethodsManagement() {
               <div className="flex items-center gap-3">
                 <div
                   className={`size-12 rounded-lg flex items-center justify-center ${
-                    method.type === "bank" ? "bg-blue-100" : "bg-purple-100"
+                    method.type === "bank"
+                      ? "bg-blue-100"
+                      : method.type === "crypto"
+                        ? "bg-purple-100"
+                        : "bg-green-100"
                   }`}
                 >
                   {method.type === "bank" ? (
                     <Building2 className="size-6 text-blue-600" />
-                  ) : (
+                  ) : method.type === "crypto" ? (
                     <Bitcoin className="size-6 text-purple-600" />
+                  ) : (
+                    <QrCode className="size-6 text-green-600" />
                   )}
                 </div>
                 <div>
@@ -560,7 +630,7 @@ export default function PaymentMethodsManagement() {
                     </div>
                   )}
                 </>
-              ) : (
+              ) : method.type === "crypto" ? (
                 <>
                   {method.network && (
                     <div>
@@ -596,6 +666,34 @@ export default function PaymentMethodsManagement() {
                           )}
                         </Button>
                       </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {method.qrCodeUrl ? (
+                    <div className="flex justify-center mt-2 group relative">
+                      <img
+                        src={method.qrCodeUrl}
+                        alt="QR Code"
+                        className="max-h-32 object-contain rounded border transition-opacity group-hover:opacity-90"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="bg-background/80 hover:bg-background"
+                          onClick={() =>
+                            window.open(method.qrCodeUrl, "_blank")
+                          }
+                        >
+                          View Full
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground flex justify-center mt-6">
+                      No QR code provided
                     </div>
                   )}
                 </>

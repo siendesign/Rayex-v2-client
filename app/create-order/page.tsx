@@ -1,145 +1,195 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { ArrowRightLeft, ArrowLeft, Info, Bitcoin, Building2, ChevronRight, Loader2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import Image from "next/image"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  ArrowRightLeft,
+  ArrowLeft,
+  Info,
+  Bitcoin,
+  Building2,
+  ChevronRight,
+  Loader2,
+  QrCode,
+  CheckCircle2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import Image from "next/image";
 
-import { useSearchParams } from "next/navigation"
-import { Suspense } from "react"
-import { useUser } from "@clerk/nextjs"
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+import { useUser } from "@clerk/nextjs";
 import {
   useGetCurrenciesQuery,
   useGetExchangeRatesQuery,
   useGetPaymentMethodsQuery,
-  useCreateOrderMutation
-} from "@/state/api"
+  useCreateOrderMutation,
+} from "@/state/api";
 
 function CreateOrderContent() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const { user } = useUser()
-  const [step, setStep] = useState(1)
-  const [paymentMethod, setPaymentMethod] = useState<"bank" | "crypto">("bank")
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user } = useUser();
+  const [step, setStep] = useState(1);
+  const [paymentMethod, setPaymentMethod] = useState<"bank" | "crypto">("bank");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { data: currenciesData, isLoading: currenciesLoading } = useGetCurrenciesQuery()
-  const { data: ratesData, isLoading: ratesLoading } = useGetExchangeRatesQuery()
-  const { data: payoutMethodsData } = useGetPaymentMethodsQuery()
-  const [createOrderMutation] = useCreateOrderMutation()
+  const { data: currenciesData, isLoading: currenciesLoading } =
+    useGetCurrenciesQuery();
+  const { data: ratesData, isLoading: ratesLoading } =
+    useGetExchangeRatesQuery();
+  const { data: payoutMethodsData } = useGetPaymentMethodsQuery();
+  const [createOrderMutation] = useCreateOrderMutation();
 
   // Exchange details
-  const [fromCurrency, setFromCurrency] = useState("USD")
-  const [toCurrency, setToCurrency] = useState("EUR")
-  const [amount, setAmount] = useState("1000")
+  const [fromCurrency, setFromCurrency] = useState("USD");
+  const [toCurrency, setToCurrency] = useState("EUR");
+  const [amount, setAmount] = useState("1000");
 
   // Initialize from search params
   useEffect(() => {
-    const from = searchParams.get("from")
-    const to = searchParams.get("to")
-    const amt = searchParams.get("amount")
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
+    const amt = searchParams.get("amount");
 
-    if (from) setFromCurrency(from)
-    if (to) setToCurrency(to)
-    if (amt) setAmount(amt)
-  }, [searchParams])
+    if (from) setFromCurrency(from);
+    if (to) setToCurrency(to);
+    if (amt) setAmount(amt);
+  }, [searchParams]);
 
   // Recipient details
-  const [recipientName, setRecipientName] = useState("")
-  const [recipientBank, setRecipientBank] = useState("")
-  const [recipientAccount, setRecipientAccount] = useState("")
-  const [recipientSwift, setRecipientSwift] = useState("")
+  const [recipientType, setRecipientType] = useState<"bank" | "crypto" | "qr">(
+    "bank",
+  );
+  const [recipientName, setRecipientName] = useState("");
+  const [recipientBank, setRecipientBank] = useState("");
+  const [recipientAccount, setRecipientAccount] = useState("");
+  const [recipientSwift, setRecipientSwift] = useState("");
+  const [recipientWallet, setRecipientWallet] = useState("");
+  const [recipientQrFile, setRecipientQrFile] = useState<File | null>(null);
 
-  const currencies = currenciesData?.data || []
-  const exchangeRates = ratesData?.data || []
-  const payoutMethods = payoutMethodsData?.data || []
+  const currencies = currenciesData?.data || [];
+  const exchangeRates = ratesData?.data || [];
+  const payoutMethods = payoutMethodsData?.data || [];
 
   // Get valid to-currencies for the selected from-currency
   const validToCurrencyCodes = exchangeRates
     .filter((r) => r.fromCurrency.code === fromCurrency && r.active)
-    .map((r) => r.toCurrency.code)
+    .map((r) => r.toCurrency.code);
 
   const validToCurrencies = currencies.filter((c) =>
-    validToCurrencyCodes.includes(c.code)
-  )
+    validToCurrencyCodes.includes(c.code),
+  );
 
   // Auto-switch toCurrency if it's no longer valid
   useEffect(() => {
-    if (validToCurrencyCodes.length > 0 && !validToCurrencyCodes.includes(toCurrency)) {
-      setToCurrency(validToCurrencyCodes[0])
+    if (
+      validToCurrencyCodes.length > 0 &&
+      !validToCurrencyCodes.includes(toCurrency)
+    ) {
+      setToCurrency(validToCurrencyCodes[0]);
     }
-  }, [fromCurrency, validToCurrencyCodes, toCurrency])
+  }, [fromCurrency, validToCurrencyCodes, toCurrency]);
 
   const getExchangeRate = () => {
     const rateItem = exchangeRates.find(
-      (r) => r.fromCurrency.code === fromCurrency && r.toCurrency.code === toCurrency
-    )
-    return rateItem ? rateItem.sellRate : 1
-  }
+      (r) =>
+        r.fromCurrency.code === fromCurrency &&
+        r.toCurrency.code === toCurrency,
+    );
+    return rateItem ? rateItem.sellRate : 1;
+  };
 
-  const rate = getExchangeRate()
-  const toCurrencyObj = currencies.find(c => c.code === toCurrency)
-  const convertedAmount = (parseFloat(amount) || 0) / rate
+  const rate = getExchangeRate();
+  const toCurrencyObj = currencies.find((c) => c.code === toCurrency);
+  const convertedAmount = (parseFloat(amount) || 0) / rate;
 
   const handleSubmit = async () => {
     if (!user?.primaryEmailAddress?.emailAddress) {
-      alert("Please sign in to create an order")
-      return
+      alert("Please sign in to create an order");
+      return;
     }
 
-    const fromCurrencyObj = currencies.find(c => c.code === fromCurrency)
+    const fromCurrencyObj = currencies.find((c) => c.code === fromCurrency);
     if (!fromCurrencyObj || !toCurrencyObj) {
-      alert("Invalid currencies selected")
-      return
+      alert("Invalid currencies selected");
+      return;
     }
 
     // Find a payment method for the "from" currency and matching type (bank/crypto)
     const selectedPayoutMethod = payoutMethods.find(
-      pm => pm.currencyId === fromCurrencyObj.id && pm.type === paymentMethod && pm.active
-    )
+      (pm) =>
+        pm.currencyId === fromCurrencyObj.id &&
+        pm.type === paymentMethod &&
+        pm.active,
+    );
 
     if (!selectedPayoutMethod) {
-      alert(`No active ${paymentMethod} payment method found. Please contact support.`)
-      return
+      alert(
+        `No active ${paymentMethod} payment method found. Please contact support.`,
+      );
+      return;
     }
 
     try {
-      setIsSubmitting(true)
-      const orderData = {
+      setIsSubmitting(true);
+
+      let payload: any = {
         userEmail: user.primaryEmailAddress.emailAddress,
         fromCurrencyId: fromCurrencyObj.id,
         fromAmount: parseFloat(amount),
         toCurrencyId: toCurrencyObj.id,
         toAmount: convertedAmount,
         paymentMethodId: selectedPayoutMethod.id,
-        recipientName,
-        recipientBank,
-        recipientAccountNumber: recipientAccount,
-        recipientSwift,
         exchangeRate: rate,
+      };
+
+      if (recipientType === "bank") {
+        payload.recipientName = recipientName;
+        payload.recipientBank = recipientBank;
+        payload.recipientAccountNumber = recipientAccount;
+        payload.recipientSwift = recipientSwift;
+      } else if (recipientType === "crypto") {
+        payload.recipientWalletAddress = recipientWallet;
+      } else if (recipientType === "qr") {
+        payload.recipientName = recipientName;
       }
 
-      const response = await createOrderMutation(orderData).unwrap()
+      if (recipientType === "qr" && recipientQrFile) {
+        const formData = new FormData();
+        Object.entries(payload).forEach(([key, value]) => {
+          if (value !== undefined) formData.append(key, value as string);
+        });
+        formData.append("recipientQrCodeImage", recipientQrFile);
+        payload = formData;
+      }
+
+      const response = await createOrderMutation(payload).unwrap();
 
       if (response.success) {
         // Navigate to payment instructions page with the new order ID
-        router.push(`/order-payment/${response.data.id}`)
+        router.push(`/order-payment/${response.data.id}`);
       }
     } catch (err: any) {
-      console.error("Failed to create order:", err)
-      alert(err.data?.message || "Failed to create order. Please try again.")
+      console.error("Failed to create order:", err);
+      alert(err.data?.message || "Failed to create order. Please try again.");
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
-  const isLoading = currenciesLoading || ratesLoading
+  const isLoading = currenciesLoading || ratesLoading;
 
   if (isLoading) {
     return (
@@ -149,7 +199,7 @@ function CreateOrderContent() {
           <p className="text-muted-foreground">Loading exchange data...</p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -182,13 +232,18 @@ function CreateOrderContent() {
               <div key={s} className="flex items-center flex-1">
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold ${step >= s ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                      }`}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold ${
+                      step >= s
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    }`}
                   >
                     {s}
                   </div>
                   <div>
-                    <div className={`font-medium ${step >= s ? "" : "text-muted-foreground"}`}>
+                    <div
+                      className={`font-medium ${step >= s ? "" : "text-muted-foreground"}`}
+                    >
                       {s === 1 && "Exchange Details"}
                       {s === 2 && "Recipient Info"}
                       {s === 3 && "Review & Confirm"}
@@ -196,7 +251,9 @@ function CreateOrderContent() {
                   </div>
                 </div>
                 {s < 3 && (
-                  <div className={`flex-1 h-0.5 mx-4 ${step > s ? "bg-primary" : "bg-border"}`} />
+                  <div
+                    className={`flex-1 h-0.5 mx-4 ${step > s ? "bg-primary" : "bg-border"}`}
+                  />
                 )}
               </div>
             ))}
@@ -214,44 +271,72 @@ function CreateOrderContent() {
             <div className="space-y-6">
               {/* Payment Method Selection */}
               <div>
-                <Label className="text-base font-semibold mb-3 block">How will you pay?</Label>
+                <Label className="text-base font-semibold mb-3 block">
+                  How will you pay?
+                </Label>
                 <RadioGroup
                   value={paymentMethod}
-                  onValueChange={(value) => setPaymentMethod(value as "bank" | "crypto")}
+                  onValueChange={(value) =>
+                    setPaymentMethod(value as "bank" | "crypto")
+                  }
                 >
                   <div className="grid md:grid-cols-2 gap-4">
                     <div
-                      className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${paymentMethod === "bank"
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/50"
-                        }`}
+                      className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${
+                        paymentMethod === "bank"
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50"
+                      }`}
                     >
-                      <RadioGroupItem value="bank" id="bank" className="sr-only" />
-                      <label htmlFor="bank" className="cursor-pointer flex items-start gap-3">
+                      <RadioGroupItem
+                        value="bank"
+                        id="bank"
+                        className="sr-only"
+                      />
+                      <label
+                        htmlFor="bank"
+                        className="cursor-pointer flex items-start gap-3"
+                      >
                         <Building2
                           className={`w-6 h-6 mt-1 ${paymentMethod === "bank" ? "text-primary" : "text-muted-foreground"}`}
                         />
                         <div className="flex-1">
-                          <div className="font-semibold mb-1">Bank Transfer</div>
-                          <div className="text-sm text-muted-foreground">Send from your bank account</div>
+                          <div className="font-semibold mb-1">
+                            Bank Transfer
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Send from your bank account
+                          </div>
                         </div>
                       </label>
                     </div>
 
                     <div
-                      className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${paymentMethod === "crypto"
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/50"
-                        }`}
+                      className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${
+                        paymentMethod === "crypto"
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50"
+                      }`}
                     >
-                      <RadioGroupItem value="crypto" id="crypto" className="sr-only" />
-                      <label htmlFor="crypto" className="cursor-pointer flex items-start gap-3">
+                      <RadioGroupItem
+                        value="crypto"
+                        id="crypto"
+                        className="sr-only"
+                      />
+                      <label
+                        htmlFor="crypto"
+                        className="cursor-pointer flex items-start gap-3"
+                      >
                         <Bitcoin
                           className={`w-6 h-6 mt-1 ${paymentMethod === "crypto" ? "text-primary" : "text-muted-foreground"}`}
                         />
                         <div className="flex-1">
-                          <div className="font-semibold mb-1">Cryptocurrency</div>
-                          <div className="text-sm text-muted-foreground">Send from your crypto wallet</div>
+                          <div className="font-semibold mb-1">
+                            Cryptocurrency
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Send from your crypto wallet
+                          </div>
                         </div>
                       </label>
                     </div>
@@ -261,7 +346,10 @@ function CreateOrderContent() {
 
               {/* From Currency */}
               <div>
-                <Label htmlFor="from-amount" className="text-base font-semibold mb-3 block">
+                <Label
+                  htmlFor="from-amount"
+                  className="text-base font-semibold mb-3 block"
+                >
                   You send
                 </Label>
                 <div className="flex gap-3">
@@ -279,7 +367,11 @@ function CreateOrderContent() {
                     </SelectTrigger>
                     <SelectContent>
                       {currencies
-                        .filter((c) => (paymentMethod === "crypto" ? c.type === "crypto" : c.type === "fiat"))
+                        .filter((c) =>
+                          paymentMethod === "crypto"
+                            ? c.type === "crypto"
+                            : c.type === "fiat",
+                        )
                         .map((currency) => (
                           <SelectItem key={currency.id} value={currency.code}>
                             <div className="flex items-center gap-2">
@@ -295,7 +387,9 @@ function CreateOrderContent() {
                               ) : (
                                 <span className="text-lg">{currency.flag}</span>
                               )}
-                              <span className="font-medium">{currency.code}</span>
+                              <span className="font-medium">
+                                {currency.code}
+                              </span>
                             </div>
                           </SelectItem>
                         ))}
@@ -308,10 +402,20 @@ function CreateOrderContent() {
               <div className="flex justify-center">
                 <button
                   className="p-3 rounded-full bg-muted cursor-pointer hover:bg-muted/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={!exchangeRates.some(r => r.fromCurrency.code === toCurrency && r.toCurrency.code === fromCurrency && r.active)}
+                  disabled={
+                    !exchangeRates.some(
+                      (r) =>
+                        r.fromCurrency.code === toCurrency &&
+                        r.toCurrency.code === fromCurrency &&
+                        r.active,
+                    )
+                  }
                   onClick={() => {
                     const reversePairExists = exchangeRates.some(
-                      (r) => r.fromCurrency.code === toCurrency && r.toCurrency.code === fromCurrency && r.active
+                      (r) =>
+                        r.fromCurrency.code === toCurrency &&
+                        r.toCurrency.code === fromCurrency &&
+                        r.active,
                     );
                     if (reversePairExists) {
                       setFromCurrency(toCurrency);
@@ -325,7 +429,10 @@ function CreateOrderContent() {
 
               {/* To Currency */}
               <div>
-                <Label htmlFor="to-amount" className="text-base font-semibold mb-3 block">
+                <Label
+                  htmlFor="to-amount"
+                  className="text-base font-semibold mb-3 block"
+                >
                   Recipient receives
                 </Label>
                 <div className="flex gap-3">
@@ -334,7 +441,7 @@ function CreateOrderContent() {
                     type="text"
                     value={convertedAmount.toLocaleString(undefined, {
                       minimumFractionDigits: 2,
-                      maximumFractionDigits: 2
+                      maximumFractionDigits: 2,
                     })}
                     readOnly
                     className="flex-1 h-14 text-lg bg-muted"
@@ -374,7 +481,9 @@ function CreateOrderContent() {
                   <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                   <div className="flex-1 space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Exchange rate</span>
+                      <span className="text-muted-foreground">
+                        Exchange rate
+                      </span>
                       <span className="font-medium">
                         1 {toCurrency} = {rate.toFixed(4)} {fromCurrency}
                       </span>
@@ -400,55 +509,206 @@ function CreateOrderContent() {
         {/* Step 2: Recipient Details */}
         {step === 2 && (
           <div className="bg-card rounded-2xl border p-8">
-            <h2 className="text-2xl font-bold mb-6">Recipient Bank Details</h2>
+            <h2 className="text-2xl font-bold mb-6">Recipient Details</h2>
 
             <div className="space-y-6">
               <div>
-                <Label htmlFor="recipient-name">Recipient Full Name</Label>
-                <Input
-                  id="recipient-name"
-                  value={recipientName}
-                  onChange={(e) => setRecipientName(e.target.value)}
-                  placeholder="John Doe"
-                  className="mt-2"
-                />
+                <Label className="text-base font-semibold mb-3 block">
+                  Destination Type
+                </Label>
+                <RadioGroup
+                  value={recipientType}
+                  onValueChange={(value) =>
+                    setRecipientType(value as "bank" | "crypto" | "qr")
+                  }
+                >
+                  <div className="grid md:grid-cols-3 gap-4">
+                    <div
+                      className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${
+                        recipientType === "bank"
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <RadioGroupItem
+                        value="bank"
+                        id="dest-bank"
+                        className="sr-only"
+                      />
+                      <label
+                        htmlFor="dest-bank"
+                        className="cursor-pointer flex flex-col items-center gap-2 text-center"
+                      >
+                        <Building2
+                          className={`w-6 h-6 ${recipientType === "bank" ? "text-primary" : "text-muted-foreground"}`}
+                        />
+                        <div className="font-semibold text-sm">Bank</div>
+                      </label>
+                    </div>
+
+                    <div
+                      className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${
+                        recipientType === "crypto"
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <RadioGroupItem
+                        value="crypto"
+                        id="dest-crypto"
+                        className="sr-only"
+                      />
+                      <label
+                        htmlFor="dest-crypto"
+                        className="cursor-pointer flex flex-col items-center gap-2 text-center"
+                      >
+                        <Bitcoin
+                          className={`w-6 h-6 ${recipientType === "crypto" ? "text-primary" : "text-muted-foreground"}`}
+                        />
+                        <div className="font-semibold text-sm">
+                          Crypto Wallet
+                        </div>
+                      </label>
+                    </div>
+
+                    <div
+                      className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${
+                        recipientType === "qr"
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <RadioGroupItem
+                        value="qr"
+                        id="dest-qr"
+                        className="sr-only"
+                      />
+                      <label
+                        htmlFor="dest-qr"
+                        className="cursor-pointer flex flex-col items-center gap-2 text-center"
+                      >
+                        <QrCode
+                          className={`w-6 h-6 ${recipientType === "qr" ? "text-primary" : "text-muted-foreground"}`}
+                        />
+                        <div className="font-semibold text-sm">QR Code</div>
+                      </label>
+                    </div>
+                  </div>
+                </RadioGroup>
               </div>
 
-              <div>
-                <Label htmlFor="bank-name">Bank Name</Label>
-                <Input
-                  id="bank-name"
-                  value={recipientBank}
-                  onChange={(e) => setRecipientBank(e.target.value)}
-                  placeholder="e.g., Deutsche Bank"
-                  className="mt-2"
-                />
-              </div>
+              {recipientType === "bank" && (
+                <>
+                  <div>
+                    <Label htmlFor="recipient-name">Recipient Full Name</Label>
+                    <Input
+                      id="recipient-name"
+                      value={recipientName}
+                      onChange={(e) => setRecipientName(e.target.value)}
+                      placeholder="John Doe"
+                      className="mt-2"
+                    />
+                  </div>
 
-              <div>
-                <Label htmlFor="account-number">Account Number / IBAN</Label>
-                <Input
-                  id="account-number"
-                  value={recipientAccount}
-                  onChange={(e) => setRecipientAccount(e.target.value)}
-                  placeholder="DE89 3704 0044 0532 0130 00"
-                  className="mt-2"
-                />
-              </div>
+                  <div>
+                    <Label htmlFor="bank-name">Bank Name</Label>
+                    <Input
+                      id="bank-name"
+                      value={recipientBank}
+                      onChange={(e) => setRecipientBank(e.target.value)}
+                      placeholder="e.g., Deutsche Bank"
+                      className="mt-2"
+                    />
+                  </div>
 
-              <div>
-                <Label htmlFor="swift">SWIFT / BIC Code</Label>
-                <Input
-                  id="swift"
-                  value={recipientSwift}
-                  onChange={(e) => setRecipientSwift(e.target.value)}
-                  placeholder="DEUTDEFF"
-                  className="mt-2"
-                />
-              </div>
+                  <div>
+                    <Label htmlFor="account-number">
+                      Account Number / IBAN
+                    </Label>
+                    <Input
+                      id="account-number"
+                      value={recipientAccount}
+                      onChange={(e) => setRecipientAccount(e.target.value)}
+                      placeholder="DE89 3704 0044 0532 0130 00"
+                      className="mt-2"
+                    />
+                  </div>
 
-              <div className="flex gap-3">
-                <Button onClick={() => setStep(1)} variant="outline" className="flex-1 h-12">
+                  <div>
+                    <Label htmlFor="swift">SWIFT / BIC Code</Label>
+                    <Input
+                      id="swift"
+                      value={recipientSwift}
+                      onChange={(e) => setRecipientSwift(e.target.value)}
+                      placeholder="DEUTDEFF"
+                      className="mt-2"
+                    />
+                  </div>
+                </>
+              )}
+
+              {recipientType === "crypto" && (
+                <div>
+                  <Label htmlFor="wallet-address">Wallet Address</Label>
+                  <Input
+                    id="wallet-address"
+                    value={recipientWallet}
+                    onChange={(e) => setRecipientWallet(e.target.value)}
+                    placeholder="0x..."
+                    className="mt-2"
+                  />
+                </div>
+              )}
+
+              {recipientType === "qr" && (
+                <>
+                  <div>
+                    <Label htmlFor="qr-name">Account Name (Optional)</Label>
+                    <Input
+                      id="qr-name"
+                      value={recipientName}
+                      onChange={(e) => setRecipientName(e.target.value)}
+                      placeholder="e.g. John's Alipay"
+                      className="mt-2"
+                    />
+                  </div>
+                  <div>
+                    <Label className="mb-2 block">
+                      Upload QR Code Data Image
+                    </Label>
+                    {recipientQrFile && (
+                      <div className="mb-4">
+                        <div className="relative w-full max-w-[200px] aspect-square rounded overflow-hidden border">
+                          <Image
+                            src={URL.createObjectURL(recipientQrFile)}
+                            alt="QR Preview"
+                            fill
+                            className="object-cover"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) setRecipientQrFile(file);
+                      }}
+                    />
+                    <p className="text-sm text-muted-foreground mt-2">
+                      We accept JPG, PNG, WEBP, and GIF up to 5MB.
+                    </p>
+                  </div>
+                </>
+              )}
+
+              <div className="flex gap-3 pt-4 border-t">
+                <Button
+                  onClick={() => setStep(1)}
+                  variant="outline"
+                  className="flex-1 h-12"
+                >
                   <ArrowLeft className="w-5 h-5 mr-2" />
                   Back
                 </Button>
@@ -479,16 +739,21 @@ function CreateOrderContent() {
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Recipient receives</span>
+                      <span className="text-muted-foreground">
+                        Recipient receives
+                      </span>
                       <span className="font-medium">
                         {convertedAmount.toLocaleString(undefined, {
                           minimumFractionDigits: 2,
-                          maximumFractionDigits: 2
-                        })} {toCurrency}
+                          maximumFractionDigits: 2,
+                        })}{" "}
+                        {toCurrency}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Exchange rate</span>
+                      <span className="text-muted-foreground">
+                        Exchange rate
+                      </span>
                       <span className="font-medium">
                         1 {toCurrency} = {rate.toFixed(4)} {fromCurrency}
                       </span>
@@ -501,19 +766,62 @@ function CreateOrderContent() {
                   <h3 className="font-semibold mb-4">Recipient Details</h3>
                   <div className="space-y-3">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Name</span>
-                      <span className="font-medium">{recipientName || "Not provided"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Bank</span>
-                      <span className="font-medium">{recipientBank || "Not provided"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Account</span>
-                      <span className="font-medium font-mono text-sm">
-                        {recipientAccount || "Not provided"}
+                      <span className="text-muted-foreground">Type</span>
+                      <span className="font-medium capitalize">
+                        {recipientType}
                       </span>
                     </div>
+
+                    {recipientType === "bank" && (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Name</span>
+                          <span className="font-medium">
+                            {recipientName || "Not provided"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Bank</span>
+                          <span className="font-medium">
+                            {recipientBank || "Not provided"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Account</span>
+                          <span className="font-medium font-mono text-sm">
+                            {recipientAccount || "Not provided"}
+                          </span>
+                        </div>
+                      </>
+                    )}
+
+                    {recipientType === "crypto" && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Wallet</span>
+                        <span className="font-medium font-mono text-sm">
+                          {recipientWallet || "Not provided"}
+                        </span>
+                      </div>
+                    )}
+
+                    {recipientType === "qr" && (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Name</span>
+                          <span className="font-medium">
+                            {recipientName || "Not provided"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">
+                            QR Image Attached
+                          </span>
+                          <span className="font-medium text-green-600 flex items-center gap-1">
+                            <CheckCircle2 className="w-4 h-4" /> Yes
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -525,13 +833,19 @@ function CreateOrderContent() {
                       <p className="font-semibold mb-1">Next Steps:</p>
                       <ol className="list-decimal list-inside space-y-1">
                         <li>
-                          We&apos;ll provide our {paymentMethod === "bank" ? "bank account" : "crypto wallet"}{" "}
+                          We&apos;ll provide our{" "}
+                          {paymentMethod === "bank"
+                            ? "bank account"
+                            : "crypto wallet"}{" "}
                           details
                         </li>
                         <li>
                           Send {amount} {fromCurrency} to the provided address
                         </li>
-                        <li>We&apos;ll exchange and transfer to recipient (usually within 2-24 hours)</li>
+                        <li>
+                          We&apos;ll exchange and transfer to recipient (usually
+                          within 2-24 hours)
+                        </li>
                       </ol>
                     </div>
                   </div>
@@ -540,11 +854,19 @@ function CreateOrderContent() {
             </div>
 
             <div className="flex gap-3">
-              <Button onClick={() => setStep(2)} variant="outline" className="flex-1 h-12">
+              <Button
+                onClick={() => setStep(2)}
+                variant="outline"
+                className="flex-1 h-12"
+              >
                 <ArrowLeft className="w-5 h-5 mr-2" />
                 Back
               </Button>
-              <Button onClick={handleSubmit} className="flex-1 h-12" disabled={isSubmitting}>
+              <Button
+                onClick={handleSubmit}
+                className="flex-1 h-12"
+                disabled={isSubmitting}
+              >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin mr-2" />
@@ -559,7 +881,7 @@ function CreateOrderContent() {
         )}
       </div>
     </div>
-  )
+  );
 }
 
 export default function CreateOrderPage() {
@@ -573,5 +895,5 @@ export default function CreateOrderPage() {
     >
       <CreateOrderContent />
     </Suspense>
-  )
+  );
 }

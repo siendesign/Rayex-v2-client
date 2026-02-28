@@ -1,172 +1,188 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react"
-import { currentUser } from "@clerk/nextjs/server"
+import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { currentUser } from "@clerk/nextjs/server";
 
 // API_VERSION: 1.0.1
 
 // Type definitions for API responses
 export interface BaseResponse<T> {
-  success: boolean
-  data: T
-  message?: string
+  success: boolean;
+  data: T;
+  message?: string;
 }
 
 export interface Currency {
-  id: string
-  code: string
-  name: string
-  symbol: string
-  flag: string
-  flagUrl?: string
-  type: "fiat" | "crypto"
-  decimals: number
-  active: boolean
-  createdAt: string
-  updatedAt: string
+  id: string;
+  code: string;
+  name: string;
+  symbol: string;
+  flag: string;
+  flagUrl?: string;
+  type: "fiat" | "crypto";
+  decimals: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ExchangeRate {
-  id: string
-  fromCurrencyId: string
-  toCurrencyId: string
-  fromCurrency: Currency
-  toCurrency: Currency
-  rate: number
-  previousRate?: number | null
-  buyRate: number
-  sellRate: number
-  lastUpdated: string
-  autoUpdate: boolean
-  active: boolean
+  id: string;
+  fromCurrencyId: string;
+  toCurrencyId: string;
+  fromCurrency: Currency;
+  toCurrency: Currency;
+  rate: number;
+  previousRate?: number | null;
+  buyRate: number;
+  sellRate: number;
+  lastUpdated: string;
+  autoUpdate: boolean;
+  active: boolean;
 }
 
 export interface CreateExchangeRateRequest {
-  fromCurrencyId: string
-  toCurrencyId: string
-  rate: number
-  buyRate?: number
-  sellRate?: number
-  autoUpdate?: boolean
-  active?: boolean
+  fromCurrencyId: string;
+  toCurrencyId: string;
+  rate: number;
+  buyRate?: number;
+  sellRate?: number;
+  autoUpdate?: boolean;
+  active?: boolean;
 }
 
 export interface UpdateExchangeRateRequest {
-  rate?: number
-  buyRate?: number
-  sellRate?: number
-  autoUpdate?: boolean
-  active?: boolean
-  fromCurrencyId?: string
-  toCurrencyId?: string
+  rate?: number;
+  buyRate?: number;
+  sellRate?: number;
+  autoUpdate?: boolean;
+  active?: boolean;
+  fromCurrencyId?: string;
+  toCurrencyId?: string;
 }
 
 export interface PaymentMethod {
-  id: string
-  name: string
-  type: "bank" | "crypto"
-  currencyId: string
-  currency: Currency
-  active: boolean
-  bankName?: string
-  accountName?: string
-  accountNumber?: string
-  routingNumber?: string
-  swift?: string
-  iban?: string
-  walletAddress?: string
-  network?: string
-  instructions?: string
+  id: string;
+  name: string;
+  type: "bank" | "crypto" | "qr";
+  currencyId: string;
+  currency: Currency;
+  active: boolean;
+  bankName?: string;
+  accountName?: string;
+  accountNumber?: string;
+  routingNumber?: string;
+  swift?: string;
+  iban?: string;
+  walletAddress?: string;
+  network?: string;
+  qrCodeUrl?: string;
+  instructions?: string;
 }
 
 export interface Order {
-  id: string
-  userId: string
-  fromCurrencyId: string
-  fromCurrency: Currency
-  fromAmount: number
-  toCurrencyId: string
-  toCurrency: Currency
-  toAmount: number
-  status: "pending_payment" | "payment_received" | "processing" | "completed" | "failed" | "cancelled"
-  paymentMethodId: string
-  paymentMethod: PaymentMethod
-  exchangeRate: number
-  fee: number
-  recipientName?: string
-  recipientBank?: string
-  recipientAccountNumber?: string
-  recipientSwift?: string
-  recipientWalletAddress?: string
-  notes?: string
-  createdAt: string
-  updatedAt: string
+  id: string;
+  userId: string;
+  fromCurrencyId: string;
+  fromCurrency: Currency;
+  fromAmount: number;
+  toCurrencyId: string;
+  toCurrency: Currency;
+  toAmount: number;
+  status:
+    | "pending_payment"
+    | "payment_received"
+    | "processing"
+    | "completed"
+    | "failed"
+    | "cancelled";
+  paymentMethodId: string;
+  paymentMethod: PaymentMethod;
+  exchangeRate: number;
+  fee: number;
+  recipientName?: string;
+  recipientBank?: string;
+  recipientAccountNumber?: string;
+  recipientSwift?: string;
+  recipientWalletAddress?: string;
+  recipientQrCodeUrl?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateOrderRequest {
-  userEmail: string
-  fromCurrencyId: string
-  fromAmount: number
-  toCurrencyId: string
-  toAmount: number
-  paymentMethodId: string
-  recipientName?: string
-  recipientBank?: string
-  recipientAccountNumber?: string
-  recipientSwift?: string
-  recipientWalletAddress?: string
-  exchangeRate: number
-  notes?: string
+  userEmail: string;
+  fromCurrencyId: string;
+  fromAmount: number;
+  toCurrencyId: string;
+  toAmount: number;
+  paymentMethodId: string;
+  recipientName?: string;
+  recipientBank?: string;
+  recipientAccountNumber?: string;
+  recipientSwift?: string;
+  recipientWalletAddress?: string;
+  recipientQrCodeUrl?: string;
+  exchangeRate: number;
+  notes?: string;
 }
 
 export interface User {
-  id: string
-  name: string
-  email: string
-  phone?: string
-  status: "active" | "suspended" | "pending"
-  role: "user" | "admin"
-  totalOrders: number
-  totalVolume: number
-  verificationStatus: "verified" | "unverified" | "pending"
-  joinedAt: string
-  lastActive: string
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  status: "active" | "suspended" | "pending";
+  role: "user" | "admin";
+  totalOrders: number;
+  totalVolume: number;
+  verificationStatus: "verified" | "unverified" | "pending";
+  joinedAt: string;
+  lastActive: string;
+}
+
+export interface Settings {
+  notificationEmail?: string;
+  [key: string]: any;
 }
 
 // Pagination types
 export interface PaginationInfo {
-  page: number
-  limit: number
-  total: number
-  totalPages: number
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 }
 
 export interface PaginatedResponse<T> extends BaseResponse<T[]> {
-  pagination: PaginationInfo
+  pagination: PaginationInfo;
 }
 
 // Filter types
 export interface OrderFilters {
-  page?: number
-  limit?: number
-  search?: string
-  status?: string
-  fromDate?: string
-  toDate?: string
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  fromDate?: string;
+  toDate?: string;
 }
 
 export interface UserFilters {
-  page?: number
-  limit?: number
-  search?: string
-  status?: string
-  role?: string
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  role?: string;
 }
 
 // Helper to clean undefined params
 const cleanParams = (params: Record<string, any>) => {
   return Object.fromEntries(
-    Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== "")
-  )
-}
+    Object.entries(params).filter(
+      ([_, v]) => v !== undefined && v !== null && v !== "",
+    ),
+  );
+};
 
 // Create API slice
 export const api = createApi({
@@ -179,17 +195,18 @@ export const api = createApi({
         // Note: This is a server-side function, in client components
         // you would use const { getToken } = useAuth() from @clerk/nextjs
         // For now, we'll handle this in the client components
-        const token = typeof window !== "undefined"
-          ? localStorage.getItem("clerk_token")
-          : null
+        const token =
+          typeof window !== "undefined"
+            ? localStorage.getItem("clerk_token")
+            : null;
 
         if (token) {
-          headers.set("Authorization", `Bearer ${token}`)
+          headers.set("Authorization", `Bearer ${token}`);
         }
       } catch (error) {
-        console.error("Error getting auth token:", error)
+        console.error("Error getting auth token:", error);
       }
-      return headers
+      return headers;
     },
   }),
   tagTypes: [
@@ -198,7 +215,8 @@ export const api = createApi({
     "PaymentMethods",
     "Orders",
     "Users",
-    "Stats"
+    "Stats",
+    "Settings",
   ],
   endpoints: (build) => ({
     // ============ CURRENCIES ============
@@ -207,7 +225,10 @@ export const api = createApi({
       providesTags: (result) =>
         result?.data
           ? [
-              ...result.data.map(({ id }) => ({ type: "Currencies" as const, id })),
+              ...result.data.map(({ id }) => ({
+                type: "Currencies" as const,
+                id,
+              })),
               { type: "Currencies", id: "LIST" },
             ]
           : [{ type: "Currencies", id: "LIST" }],
@@ -218,7 +239,10 @@ export const api = createApi({
       providesTags: (result, error, id) => [{ type: "Currencies", id }],
     }),
 
-    createCurrency: build.mutation<BaseResponse<Currency>, FormData | Partial<Currency>>({
+    createCurrency: build.mutation<
+      BaseResponse<Currency>,
+      FormData | Partial<Currency>
+    >({
       query: (body) => ({
         url: "currencies",
         method: "POST",
@@ -227,7 +251,10 @@ export const api = createApi({
       invalidatesTags: [{ type: "Currencies", id: "LIST" }],
     }),
 
-    updateCurrency: build.mutation<BaseResponse<Currency>, { id: string; data: FormData | Partial<Currency> }>({
+    updateCurrency: build.mutation<
+      BaseResponse<Currency>,
+      { id: string; data: FormData | Partial<Currency> }
+    >({
       query: ({ id, data }) => ({
         url: `currencies/${id}`,
         method: "PUT",
@@ -257,17 +284,17 @@ export const api = createApi({
         const patchResult = dispatch(
           api.util.updateQueryData("getCurrencies", undefined, (draft) => {
             if (draft?.data) {
-              const currency = draft.data.find((c) => c.id === id)
+              const currency = draft.data.find((c) => c.id === id);
               if (currency) {
-                currency.active = !currency.active
+                currency.active = !currency.active;
               }
             }
-          })
-        )
+          }),
+        );
         try {
-          await queryFulfilled
+          await queryFulfilled;
         } catch {
-          patchResult.undo()
+          patchResult.undo();
         }
       },
       invalidatesTags: (result, error, id) => [{ type: "Currencies", id }],
@@ -279,7 +306,10 @@ export const api = createApi({
       providesTags: (result) =>
         result?.data
           ? [
-              ...result.data.map(({ id }) => ({ type: "ExchangeRates" as const, id })),
+              ...result.data.map(({ id }) => ({
+                type: "ExchangeRates" as const,
+                id,
+              })),
               { type: "ExchangeRates", id: "LIST" },
             ]
           : [{ type: "ExchangeRates", id: "LIST" }],
@@ -290,7 +320,10 @@ export const api = createApi({
       providesTags: (result, error, id) => [{ type: "ExchangeRates", id }],
     }),
 
-    createExchangeRate: build.mutation<BaseResponse<ExchangeRate>, CreateExchangeRateRequest>({
+    createExchangeRate: build.mutation<
+      BaseResponse<ExchangeRate>,
+      CreateExchangeRateRequest
+    >({
       query: (body) => ({
         url: "exchange-rates",
         method: "POST",
@@ -299,7 +332,10 @@ export const api = createApi({
       invalidatesTags: [{ type: "ExchangeRates", id: "LIST" }],
     }),
 
-    updateExchangeRate: build.mutation<BaseResponse<ExchangeRate>, { id: string; data: UpdateExchangeRateRequest }>({
+    updateExchangeRate: build.mutation<
+      BaseResponse<ExchangeRate>,
+      { id: string; data: UpdateExchangeRateRequest }
+    >({
       query: ({ id, data }) => ({
         url: `exchange-rates/${id}`,
         method: "PUT",
@@ -336,7 +372,10 @@ export const api = createApi({
       providesTags: (result) =>
         result?.data
           ? [
-              ...result.data.map(({ id }) => ({ type: "PaymentMethods" as const, id })),
+              ...result.data.map(({ id }) => ({
+                type: "PaymentMethods" as const,
+                id,
+              })),
               { type: "PaymentMethods", id: "LIST" },
             ]
           : [{ type: "PaymentMethods", id: "LIST" }],
@@ -347,7 +386,10 @@ export const api = createApi({
       providesTags: (result, error, id) => [{ type: "PaymentMethods", id }],
     }),
 
-    createPaymentMethod: build.mutation<BaseResponse<PaymentMethod>, Partial<PaymentMethod>>({
+    createPaymentMethod: build.mutation<
+      BaseResponse<PaymentMethod>,
+      Partial<PaymentMethod> | FormData
+    >({
       query: (body) => ({
         url: "payment-methods",
         method: "POST",
@@ -356,7 +398,10 @@ export const api = createApi({
       invalidatesTags: [{ type: "PaymentMethods", id: "LIST" }],
     }),
 
-    updatePaymentMethod: build.mutation<BaseResponse<PaymentMethod>, { id: string; data: Partial<PaymentMethod> }>({
+    updatePaymentMethod: build.mutation<
+      BaseResponse<PaymentMethod>,
+      { id: string; data: Partial<PaymentMethod> | FormData }
+    >({
       query: ({ id, data }) => ({
         url: `payment-methods/${id}`,
         method: "PUT",
@@ -407,7 +452,10 @@ export const api = createApi({
       providesTags: (result, error, id) => [{ type: "Orders", id }],
     }),
 
-    createOrder: build.mutation<BaseResponse<Order>, CreateOrderRequest>({
+    createOrder: build.mutation<
+      BaseResponse<Order>,
+      CreateOrderRequest | FormData
+    >({
       query: (body) => ({
         url: "orders",
         method: "POST",
@@ -419,7 +467,10 @@ export const api = createApi({
       ],
     }),
 
-    updateOrderStatus: build.mutation<BaseResponse<Order>, { id: string; status: Order["status"]; notes?: string }>({
+    updateOrderStatus: build.mutation<
+      BaseResponse<Order>,
+      { id: string; status: Order["status"]; notes?: string }
+    >({
       query: ({ id, status, notes }) => ({
         url: `orders/${id}/status`,
         method: "PUT",
@@ -430,14 +481,14 @@ export const api = createApi({
         const patchResult = dispatch(
           api.util.updateQueryData("getOrder", id, (draft) => {
             if (draft?.data) {
-              draft.data.status = status
+              draft.data.status = status;
             }
-          })
-        )
+          }),
+        );
         try {
-          await queryFulfilled
+          await queryFulfilled;
         } catch {
-          patchResult.undo()
+          patchResult.undo();
         }
       },
       invalidatesTags: (result, error, { id }) => [
@@ -467,7 +518,10 @@ export const api = createApi({
       providesTags: (result, error, id) => [{ type: "Users", id }],
     }),
 
-    updateUserStatus: build.mutation<BaseResponse<User>, { id: string; status: User["status"] }>({
+    updateUserStatus: build.mutation<
+      BaseResponse<User>,
+      { id: string; status: User["status"] }
+    >({
       query: ({ id, status }) => ({
         url: `users/${id}/status`,
         method: "PUT",
@@ -480,14 +534,18 @@ export const api = createApi({
     }),
 
     // Sync user from Clerk to database
-    syncUser: build.mutation<BaseResponse<User>, {
-      clerkId: string
-      name: string
-      email: string
-      phone?: string
-      role: string
-      metadata?: Record<string, any>
-    }>({
+    syncUser: build.mutation<
+      BaseResponse<User>,
+      {
+        clerkId: string;
+        name: string;
+        email: string;
+        phone?: string;
+        role: string;
+        metadata?: Record<string, any>;
+        triggerEmail?: boolean;
+      }
+    >({
       query: (body) => ({
         url: "users/sync",
         method: "POST",
@@ -522,7 +580,10 @@ export const api = createApi({
       ],
     }),
 
-    updateUserRole: build.mutation<BaseResponse<User>, { id: string; role: "user" | "admin" }>({
+    updateUserRole: build.mutation<
+      BaseResponse<User>,
+      { id: string; role: "user" | "admin" }
+    >({
       query: ({ id, role }) => ({
         url: `admin/users/${id}/role`,
         method: "PUT",
@@ -550,8 +611,22 @@ export const api = createApi({
       query: () => "stats",
       providesTags: [{ type: "Stats", id: "LIST" }],
     }),
+
+    // ============ SETTINGS ============
+    getSettings: build.query<Settings, void>({
+      query: () => "settings",
+      providesTags: ["Settings"],
+    }),
+    updateSettings: build.mutation<void, Settings>({
+      query: (body) => ({
+        url: "settings",
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: ["Settings"],
+    }),
   }),
-})
+});
 
 // Export hooks for usage in components
 export const {
@@ -599,4 +674,8 @@ export const {
 
   // Stats
   useGetStatsQuery,
-} = api
+
+  // Settings
+  useGetSettingsQuery,
+  useUpdateSettingsMutation,
+} = api;

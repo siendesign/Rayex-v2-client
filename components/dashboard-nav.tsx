@@ -1,31 +1,45 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { Bell, Settings, LogOut, ArrowRightLeft, Menu, X, Clock } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { useClerk, useUser } from "@clerk/nextjs"
-import { useRouter } from "next/navigation"
+import { useState } from "react";
+import Link from "next/link";
+import {
+  Bell,
+  Settings,
+  LogOut,
+  ArrowRightLeft,
+  Menu,
+  X,
+  Clock,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useClerk, useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 
 export function DashboardNav() {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const { signOut } = useClerk()
-  const { user } = useUser()
-  const router = useRouter()
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { signOut } = useClerk();
+  const { user } = useUser();
+  const router = useRouter();
 
   const handleSignOut = async () => {
-    await signOut()
-    router.push("/")
-  }
+    // Clear login track keys so emails send on next login
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith("rayex_login_")) {
+        localStorage.removeItem(key);
+      }
+    });
+    await signOut();
+    router.push("/");
+  };
 
-  const userName = user?.fullName || "User"
-  const userEmail = user?.primaryEmailAddress?.emailAddress || ""
+  const userName = user?.fullName || "User";
+  const userEmail = user?.primaryEmailAddress?.emailAddress || "";
   const userInitials = userName
     .split(" ")
     .map((n) => n[0])
     .join("")
     .toUpperCase()
-    .slice(0, 2)
+    .slice(0, 2);
 
   return (
     <>
@@ -72,7 +86,9 @@ export function DashboardNav() {
                   <p className="text-xs text-muted-foreground">{userEmail}</p>
                 </div>
                 <div className="size-10 rounded-full bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center">
-                  <span className="text-primary-foreground font-semibold">{userInitials}</span>
+                  <span className="text-primary-foreground font-semibold">
+                    {userInitials}
+                  </span>
                 </div>
               </div>
               <Button variant="ghost" size="icon" onClick={handleSignOut}>
@@ -87,7 +103,11 @@ export function DashboardNav() {
               className="md:hidden"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             >
-              {isMobileMenuOpen ? <X className="size-6" /> : <Menu className="size-6" />}
+              {isMobileMenuOpen ? (
+                <X className="size-6" />
+              ) : (
+                <Menu className="size-6" />
+              )}
             </Button>
           </div>
         </div>
@@ -99,7 +119,9 @@ export function DashboardNav() {
               {/* User Info */}
               <div className="flex items-center gap-3 pb-4 border-b">
                 <div className="size-12 rounded-full bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center">
-                  <span className="text-primary-foreground font-semibold">{userInitials}</span>
+                  <span className="text-primary-foreground font-semibold">
+                    {userInitials}
+                  </span>
                 </div>
                 <div>
                   <p className="text-sm font-medium">{userName}</p>
@@ -109,14 +131,26 @@ export function DashboardNav() {
 
               {/* Menu Items */}
               <div className="space-y-2">
-                <Link href="/dashboard" onClick={() => setIsMobileMenuOpen(false)}>
-                  <Button variant="ghost" className="w-full justify-start gap-3">
+                <Link
+                  href="/dashboard"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3"
+                  >
                     <ArrowRightLeft className="size-5" />
                     <span>Dashboard</span>
                   </Button>
                 </Link>
-                <Link href="/dashboard/orders" onClick={() => setIsMobileMenuOpen(false)}>
-                  <Button variant="ghost" className="w-full justify-start gap-3">
+                <Link
+                  href="/dashboard/orders"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3"
+                  >
                     <Clock className="size-5" />
                     <span>My Orders</span>
                   </Button>
@@ -144,5 +178,5 @@ export function DashboardNav() {
         )}
       </nav>
     </>
-  )
+  );
 }
