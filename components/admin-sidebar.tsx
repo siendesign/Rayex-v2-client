@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Coins,
@@ -15,9 +15,9 @@ import {
   ArrowRightLeft,
   Menu,
   X,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { useClerk, useUser } from "@clerk/nextjs"
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useClerk, useUser } from "@clerk/nextjs";
 
 const navigation = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -27,34 +27,45 @@ const navigation = [
   { name: "Payment Methods", href: "/admin/payment-methods", icon: Wallet },
   { name: "Users", href: "/admin/users", icon: Users },
   { name: "Settings", href: "/admin/settings", icon: Settings },
-]
+];
 
 export function AdminSidebar() {
-  const pathname = usePathname()
-  const router = useRouter()
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const { signOut } = useClerk()
-  const { user } = useUser()
+  const pathname = usePathname();
+  const router = useRouter();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { signOut } = useClerk();
+  const { user } = useUser();
 
   const handleSignOut = async () => {
-    await signOut()
-    router.push("/")
-  }
+    // Clear login track keys so emails send on next login
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith("rayex_login_")) {
+        localStorage.removeItem(key);
+      }
+    });
+    await signOut();
+    router.push("/");
+  };
 
-  const userName = user?.fullName || "Admin User"
-  const userEmail = user?.primaryEmailAddress?.emailAddress || "admin@rayex.com"
+  const userName = user?.fullName || "Admin User";
+  const userEmail =
+    user?.primaryEmailAddress?.emailAddress || "admin@rayex.com";
   const userInitials = userName
     .split(" ")
     .map((n) => n[0])
     .join("")
     .toUpperCase()
-    .slice(0, 2)
+    .slice(0, 2);
 
   const SidebarContent = () => (
     <>
       {/* Logo */}
       <div className="p-6 border-b border-gray-800">
-        <Link href="/admin" className="flex items-center gap-2" onClick={() => setIsMobileMenuOpen(false)}>
+        <Link
+          href="/admin"
+          className="flex items-center gap-2"
+          onClick={() => setIsMobileMenuOpen(false)}
+        >
           <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
             <ArrowRightLeft className="size-4 text-primary-foreground" />
           </div>
@@ -68,8 +79,8 @@ export function AdminSidebar() {
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1">
         {navigation.map((item) => {
-          const Icon = item.icon
-          const isActive = pathname === item.href
+          const Icon = item.icon;
+          const isActive = pathname === item.href;
 
           return (
             <Link
@@ -85,7 +96,7 @@ export function AdminSidebar() {
               <Icon className="size-5" />
               <span className="font-medium">{item.name}</span>
             </Link>
-          )
+          );
         })}
       </nav>
 
@@ -93,7 +104,9 @@ export function AdminSidebar() {
       <div className="p-4 border-t border-gray-800">
         <div className="flex items-center gap-3 mb-4">
           <div className="size-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
-            <span className="text-white font-semibold text-sm">{userInitials}</span>
+            <span className="text-white font-semibold text-sm">
+              {userInitials}
+            </span>
           </div>
           <div className="flex-1">
             <div className="text-sm font-medium text-white">{userName}</div>
@@ -110,7 +123,7 @@ export function AdminSidebar() {
         </Button>
       </div>
     </>
-  )
+  );
 
   return (
     <>
@@ -129,7 +142,11 @@ export function AdminSidebar() {
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="text-white"
           >
-            {isMobileMenuOpen ? <X className="size-6" /> : <Menu className="size-6" />}
+            {isMobileMenuOpen ? (
+              <X className="size-6" />
+            ) : (
+              <Menu className="size-6" />
+            )}
           </Button>
         </div>
       </div>
@@ -158,5 +175,5 @@ export function AdminSidebar() {
         <SidebarContent />
       </div>
     </>
-  )
+  );
 }

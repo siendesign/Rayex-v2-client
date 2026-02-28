@@ -1,30 +1,30 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
+import { useState, useMemo } from "react";
 import {
   useReactTable,
   getCoreRowModel,
   flexRender,
   type ColumnDef,
-} from "@tanstack/react-table"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+} from "@tanstack/react-table";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -32,7 +32,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/ui/table";
 import {
   Search,
   Eye,
@@ -44,36 +44,44 @@ import {
   ChevronRight,
   Loader2,
   AlertCircle,
-} from "lucide-react"
-import { useGetOrdersQuery, useUpdateOrderStatusMutation, api } from "@/state/api"
-import { useEffect } from "react"
-import { useAppDispatch } from "@/state/redux"
-import { useSSE } from "@/hooks/useSSE"
+  QrCode,
+} from "lucide-react";
+import {
+  useGetOrdersQuery,
+  useUpdateOrderStatusMutation,
+  api,
+} from "@/state/api";
+import { useEffect } from "react";
+import { useAppDispatch } from "@/state/redux";
+import { useSSE } from "@/hooks/useSSE";
+import Image from "next/image";
 
 // Local interface for UI mapping
 interface OrderUI {
-  id: string
-  userId: string
-  userName: string
-  userEmail: string
-  from: { currency: string; amount: string; flag: string }
-  to: { currency: string; amount: string; flag: string }
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  from: { currency: string; amount: string; flag: string };
+  to: { currency: string; amount: string; flag: string };
   status:
-  | "pending_payment"
-  | "payment_received"
-  | "processing"
-  | "completed"
-  | "failed"
-  | "cancelled"
-  paymentMethod: string
-  recipientName: string
-  recipientBank: string
-  recipientAccount: string
-  createdAt: string
-  updatedAt: string
-  rate: string
-  fee: string
-  notes?: string
+    | "pending_payment"
+    | "payment_received"
+    | "processing"
+    | "completed"
+    | "failed"
+    | "cancelled";
+  paymentMethod: string;
+  recipientName: string;
+  recipientBank: string;
+  recipientAccount: string;
+  recipientWallet?: string;
+  recipientQrCode?: string;
+  createdAt: string;
+  updatedAt: string;
+  rate: string;
+  fee: string;
+  notes?: string;
 }
 
 const statusConfig = {
@@ -113,19 +121,20 @@ const statusConfig = {
     className: "bg-gray-500 hover:bg-gray-600 text-white",
     icon: XCircle,
   },
-}
+};
 
 export default function OrdersManagement() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState<string>("all")
-  const [page, setPage] = useState(1)
-  const pageSize = 10
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
-  const [selectedOrder, setSelectedOrder] = useState<OrderUI | null>(null)
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false)
-  const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false)
-  const [newStatus, setNewStatus] = useState<OrderUI["status"]>("pending_payment")
-  const [statusNotes, setStatusNotes] = useState("")
+  const [selectedOrder, setSelectedOrder] = useState<OrderUI | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
+  const [newStatus, setNewStatus] =
+    useState<OrderUI["status"]>("pending_payment");
+  const [statusNotes, setStatusNotes] = useState("");
 
   // API Queries & Mutations
   const { data, isLoading, error } = useGetOrdersQuery({
@@ -133,10 +142,11 @@ export default function OrdersManagement() {
     limit: pageSize,
     search: searchQuery,
     status: statusFilter === "all" ? undefined : statusFilter,
-  })
+  });
 
-  const [updateStatus, { isLoading: isUpdating }] = useUpdateOrderStatusMutation()
-  const dispatch = useAppDispatch()
+  const [updateStatus, { isLoading: isUpdating }] =
+    useUpdateOrderStatusMutation();
+  const dispatch = useAppDispatch();
 
   // Replace Socket.io with SSE
   const sseUrl = `${process.env.NEXT_PUBLIC_API_URL}/realtime/sse?role=admin`;
@@ -145,53 +155,63 @@ export default function OrdersManagement() {
     url: sseUrl,
     events: {
       new_order: (newOrder: any) => {
-        console.log('🔔 Admin SSE: Received new_order:', newOrder)
+        console.log("🔔 Admin SSE: Received new_order:", newOrder);
         // Refresh the list if on page 1
         if (page === 1) {
           dispatch(
-            api.util.updateQueryData('getOrders' as any, {
+            api.util.updateQueryData(
+              "getOrders" as any,
+              {
+                page,
+                limit: pageSize,
+                search: searchQuery,
+                status: statusFilter === "all" ? undefined : statusFilter,
+              },
+              (draft: any) => {
+                if (draft && draft.data) {
+                  if (!draft.data.some((o: any) => o.id === newOrder.id)) {
+                    console.log("✅ Admin SSE: Adding new order to cache");
+                    draft.data.unshift(newOrder);
+                  }
+                }
+              },
+            ),
+          );
+        }
+      },
+      order_updated: (updatedOrder: any) => {
+        console.log("🔔 Admin SSE: Received order_updated:", updatedOrder);
+        dispatch(
+          api.util.updateQueryData(
+            "getOrders" as any,
+            {
               page,
               limit: pageSize,
               search: searchQuery,
               status: statusFilter === "all" ? undefined : statusFilter,
-            }, (draft: any) => {
+            },
+            (draft: any) => {
               if (draft && draft.data) {
-                if (!draft.data.some((o: any) => o.id === newOrder.id)) {
-                  console.log('✅ Admin SSE: Adding new order to cache')
-                  draft.data.unshift(newOrder)
+                const index = draft.data.findIndex(
+                  (o: any) => o.id === updatedOrder.id,
+                );
+                if (index !== -1) {
+                  console.log("✅ Admin SSE: Updating order in cache");
+                  draft.data[index] = {
+                    ...draft.data[index],
+                    ...updatedOrder,
+                  };
                 }
               }
-            })
-          )
-        }
+            },
+          ),
+        );
       },
-      order_updated: (updatedOrder: any) => {
-        console.log('🔔 Admin SSE: Received order_updated:', updatedOrder)
-        dispatch(
-          api.util.updateQueryData('getOrders' as any, {
-            page,
-            limit: pageSize,
-            search: searchQuery,
-            status: statusFilter === "all" ? undefined : statusFilter,
-          }, (draft: any) => {
-            if (draft && draft.data) {
-              const index = draft.data.findIndex((o: any) => o.id === updatedOrder.id)
-              if (index !== -1) {
-                console.log('✅ Admin SSE: Updating order in cache')
-                draft.data[index] = {
-                  ...draft.data[index],
-                  ...updatedOrder,
-                }
-              }
-            }
-          })
-        )
-      }
-    }
+    },
   });
 
   const mappedOrders = useMemo<OrderUI[]>(() => {
-    if (!data?.data) return []
+    if (!data?.data) return [];
     return data.data.map((order: any) => ({
       id: order.id,
       userId: order.user?.id || "",
@@ -200,25 +220,27 @@ export default function OrdersManagement() {
       from: {
         currency: order.fromCurrency?.code || "???",
         amount: order.fromAmount.toLocaleString(),
-        flag: order.fromCurrency?.flag || "🌍"
+        flag: order.fromCurrency?.flag || "🌍",
       },
       to: {
         currency: order.toCurrency?.code || "???",
         amount: order.toAmount.toLocaleString(),
-        flag: order.toCurrency?.flag || "🌍"
+        flag: order.toCurrency?.flag || "🌍",
       },
       status: order.status as OrderUI["status"],
       paymentMethod: order.paymentMethod?.name || order.paymentMethodId,
       recipientName: order.recipientName || "N/A",
       recipientBank: order.recipientBank || "N/A",
       recipientAccount: order.recipientAccountNumber || "N/A",
+      recipientWallet: order.recipientWalletAddress,
+      recipientQrCode: order.recipientQrCodeUrl,
       createdAt: new Date(order.createdAt).toLocaleString(),
       updatedAt: new Date(order.updatedAt).toLocaleString(),
       rate: order.exchangeRate.toString(),
       fee: order.fee.toString(),
       notes: order.notes,
-    }))
-  }, [data])
+    }));
+  }, [data]);
 
   const columns = useMemo<ColumnDef<OrderUI>[]>(
     () => [
@@ -272,16 +294,16 @@ export default function OrdersManagement() {
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => {
-          const status = row.getValue("status") as OrderUI["status"]
-          const config = statusConfig[status]
-          if (!config) return <Badge>{status}</Badge>
-          const Icon = config.icon
+          const status = row.getValue("status") as OrderUI["status"];
+          const config = statusConfig[status];
+          if (!config) return <Badge>{status}</Badge>;
+          const Icon = config.icon;
           return (
             <Badge variant={config.variant} className={config.className}>
               <Icon className="size-3 mr-1" />
               {config.label}
             </Badge>
-          )
+          );
         },
       },
       {
@@ -315,19 +337,19 @@ export default function OrdersManagement() {
         ),
       },
     ],
-    []
-  )
+    [],
+  );
 
   const table = useReactTable({
     data: mappedOrders,
     columns,
     getCoreRowModel: getCoreRowModel(),
-  })
+  });
 
   const handleViewDetails = (order: OrderUI) => {
-    setSelectedOrder(order)
-    setIsDetailsOpen(true)
-  }
+    setSelectedOrder(order);
+    setIsDetailsOpen(true);
+  };
 
   const handleUpdateStatus = async () => {
     if (selectedOrder) {
@@ -336,31 +358,31 @@ export default function OrdersManagement() {
           id: selectedOrder.id,
           status: newStatus,
           notes: statusNotes,
-        }).unwrap()
+        }).unwrap();
 
-        setIsStatusDialogOpen(false)
-        setIsDetailsOpen(false)
-        setStatusNotes("")
+        setIsStatusDialogOpen(false);
+        setIsDetailsOpen(false);
+        setStatusNotes("");
         // RTK Query will automatically refetch due to tag invalidation
       } catch (err) {
-        console.error("Failed to update status:", err)
+        console.error("Failed to update status:", err);
       }
     }
-  }
+  };
 
   const openStatusDialog = (order: OrderUI) => {
-    setSelectedOrder(order)
-    setNewStatus(order.status)
-    setStatusNotes("")
-    setIsStatusDialogOpen(true)
-  }
+    setSelectedOrder(order);
+    setNewStatus(order.status);
+    setStatusNotes("");
+    setIsStatusDialogOpen(true);
+  };
 
   if (isLoading && page === 1) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="size-8 animate-spin text-primary" />
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -369,7 +391,7 @@ export default function OrdersManagement() {
         <AlertCircle className="size-8 text-destructive" />
         <p className="text-muted-foreground">Failed to load orders</p>
       </div>
-    )
+    );
   }
 
   return (
@@ -389,8 +411,8 @@ export default function OrdersManagement() {
           <Input
             value={searchQuery}
             onChange={(e) => {
-              setSearchQuery(e.target.value)
-              setPage(1)
+              setSearchQuery(e.target.value);
+              setPage(1);
             }}
             placeholder="Search by order ID, user name, or email..."
             className="pl-10"
@@ -400,8 +422,8 @@ export default function OrdersManagement() {
           <Select
             value={statusFilter}
             onValueChange={(val) => {
-              setStatusFilter(val)
-              setPage(1)
+              setStatusFilter(val);
+              setPage(1);
             }}
           >
             <SelectTrigger>
@@ -437,9 +459,9 @@ export default function OrdersManagement() {
                       {header.isPlaceholder
                         ? null
                         : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
                     </TableHead>
                   ))}
                 </TableRow>
@@ -453,7 +475,7 @@ export default function OrdersManagement() {
                       <TableCell key={cell.id}>
                         {flexRender(
                           cell.column.columnDef.cell,
-                          cell.getContext()
+                          cell.getContext(),
                         )}
                       </TableCell>
                     ))}
@@ -484,7 +506,7 @@ export default function OrdersManagement() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setPage(p => Math.max(1, p - 1))}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
           >
             <ChevronLeft className="size-4" />
@@ -496,8 +518,10 @@ export default function OrdersManagement() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setPage(p => p + 1)}
-            disabled={data?.pagination ? page >= data.pagination.totalPages : true}
+            onClick={() => setPage((p) => p + 1)}
+            disabled={
+              data?.pagination ? page >= data.pagination.totalPages : true
+            }
           >
             <span className="hidden sm:inline">Next</span>
             <ChevronRight className="size-4" />
@@ -525,15 +549,18 @@ export default function OrdersManagement() {
                   <Label className="text-muted-foreground">Status</Label>
                   <div className="mt-1">
                     {(() => {
-                      const config = statusConfig[selectedOrder.status]
-                      if (!config) return <Badge>{selectedOrder.status}</Badge>
-                      const Icon = config.icon
+                      const config = statusConfig[selectedOrder.status];
+                      if (!config) return <Badge>{selectedOrder.status}</Badge>;
+                      const Icon = config.icon;
                       return (
-                        <Badge variant={config.variant} className={config.className}>
+                        <Badge
+                          variant={config.variant}
+                          className={config.className}
+                        >
                           <Icon className="size-3 mr-1" />
                           {config.label}
                         </Badge>
-                      )
+                      );
                     })()}
                   </div>
                 </div>
@@ -581,7 +608,9 @@ export default function OrdersManagement() {
                     <span className="font-medium">${selectedOrder.fee}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Payment Method</span>
+                    <span className="text-muted-foreground">
+                      Payment Method
+                    </span>
                     <span className="font-medium capitalize">
                       {selectedOrder.paymentMethod}
                     </span>
@@ -597,16 +626,58 @@ export default function OrdersManagement() {
                     <Label className="text-muted-foreground">Name</Label>
                     <div>{selectedOrder.recipientName}</div>
                   </div>
-                  <div>
-                    <Label className="text-muted-foreground">Bank</Label>
-                    <div>{selectedOrder.recipientBank}</div>
-                  </div>
-                  <div>
-                    <Label className="text-muted-foreground">Account</Label>
-                    <div className="font-mono text-sm">
-                      {selectedOrder.recipientAccount}
+
+                  {selectedOrder.recipientWallet ? (
+                    <div>
+                      <Label className="text-muted-foreground">
+                        Crypto Wallet Address
+                      </Label>
+                      <div className="font-mono text-sm break-all">
+                        {selectedOrder.recipientWallet}
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
+
+                  {!selectedOrder.recipientWallet && (
+                    <>
+                      <div>
+                        <Label className="text-muted-foreground">Bank</Label>
+                        <div>{selectedOrder.recipientBank}</div>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">
+                          Account / IBAN
+                        </Label>
+                        <div className="font-mono text-sm">
+                          {selectedOrder.recipientAccount}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {selectedOrder.recipientQrCode &&
+                    typeof selectedOrder.recipientQrCode === "string" && (
+                      <div className="mt-4 pt-4 border-t">
+                        <Label className="text-muted-foreground flex items-center gap-2 mb-2">
+                          <QrCode className="w-4 h-4" />
+                          Uploaded QR Code
+                        </Label>
+                        <a
+                          href={selectedOrder.recipientQrCode}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block w-[120px] aspect-square rounded-lg overflow-hidden border bg-muted hover:opacity-90 transition-opacity"
+                        >
+                          <Image
+                            src={selectedOrder.recipientQrCode}
+                            alt="Recipient QR Code"
+                            width={120}
+                            height={120}
+                            className="w-full h-full object-cover"
+                          />
+                        </a>
+                      </div>
+                    )}
                 </div>
               </div>
 
@@ -657,7 +728,9 @@ export default function OrdersManagement() {
               <Label htmlFor="newStatus">New Status</Label>
               <Select
                 value={newStatus}
-                onValueChange={(value) => setNewStatus(value as OrderUI["status"])}
+                onValueChange={(value) =>
+                  setNewStatus(value as OrderUI["status"])
+                }
               >
                 <SelectTrigger id="newStatus" className="mt-1">
                   <SelectValue />
@@ -698,7 +771,9 @@ export default function OrdersManagement() {
                 className="flex-1"
                 disabled={isUpdating}
               >
-                {isUpdating ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+                {isUpdating ? (
+                  <Loader2 className="size-4 animate-spin mr-2" />
+                ) : null}
                 Update Status
               </Button>
             </div>
@@ -706,5 +781,5 @@ export default function OrdersManagement() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }
