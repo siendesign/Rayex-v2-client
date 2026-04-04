@@ -17,7 +17,7 @@ export function Navbar() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
             <Image
-              src="/ChatGPT Image Apr 3, 2026, 02_18_59 PM.png"
+              src="/logo.png"
               alt="RayEx Logo"
               width={32}
               height={32}
