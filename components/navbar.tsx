@@ -1,13 +1,14 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { Menu, X } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs"
+import { useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { Menu, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 
 export function Navbar() {
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <nav className="sticky top-0 z-50 bg-background border-b">
@@ -15,24 +16,40 @@ export function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-none bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg">R</span>
-            </div>
+            <Image
+              src="/logo.png"
+              alt="RayEx Logo"
+              width={32}
+              height={32}
+              className="object-contain"
+            />
             <span className="text-xl font-semibold">RayEx</span>
           </Link>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-8">
-            <Link href="#exchange" className="text-muted-foreground hover:text-foreground transition-colors">
+            <Link
+              href="#exchange"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
               Exchange
             </Link>
-            <Link href="#rates" className="text-muted-foreground hover:text-foreground transition-colors">
+            <Link
+              href="#rates"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
               Rates
             </Link>
-            <Link href="#business" className="text-muted-foreground hover:text-foreground transition-colors">
+            <Link
+              href="#business"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
               Business
             </Link>
-            <Link href="#about" className="text-muted-foreground hover:text-foreground transition-colors">
+            <Link
+              href="#about"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
               About
             </Link>
           </div>
@@ -64,11 +81,7 @@ export function Navbar() {
             className="md:hidden p-2 rounded-lg hover:bg-muted"
             aria-label="Toggle menu"
           >
-            {isOpen ? (
-              <X className="w-6 h-6" />
-            ) : (
-              <Menu className="w-6 h-6" />
-            )}
+            {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>
       </div>
@@ -107,21 +120,43 @@ export function Navbar() {
             </Link>
             <div className="pt-3 space-y-2 border-t pt-4">
               <SignedIn>
-                <Link href="/dashboard/orders" onClick={() => setIsOpen(false)} className="block py-2">
-                  <Button variant="ghost" className="w-full justify-start">My Orders</Button>
+                <Link
+                  href="/dashboard/orders"
+                  onClick={() => setIsOpen(false)}
+                  className="block py-2"
+                >
+                  <Button variant="ghost" className="w-full justify-start">
+                    My Orders
+                  </Button>
                 </Link>
-                <Link href="/dashboard" onClick={() => setIsOpen(false)} className="block py-2">
-                  <Button variant="outline" className="w-full">Dashboard</Button>
+                <Link
+                  href="/dashboard"
+                  onClick={() => setIsOpen(false)}
+                  className="block py-2"
+                >
+                  <Button variant="outline" className="w-full">
+                    Dashboard
+                  </Button>
                 </Link>
                 <div className="flex justify-center py-2">
                   <UserButton afterSignOutUrl="/" />
                 </div>
               </SignedIn>
               <SignedOut>
-                <Link href="/login" onClick={() => setIsOpen(false)} className="block py-2">
-                  <Button variant="outline" className="w-full">Sign In</Button>
+                <Link
+                  href="/login"
+                  onClick={() => setIsOpen(false)}
+                  className="block py-2"
+                >
+                  <Button variant="outline" className="w-full">
+                    Sign In
+                  </Button>
                 </Link>
-                <Link href="/signup" onClick={() => setIsOpen(false)} className="block py-2">
+                <Link
+                  href="/signup"
+                  onClick={() => setIsOpen(false)}
+                  className="block py-2"
+                >
                   <Button className="w-full">Get Started</Button>
                 </Link>
               </SignedOut>
@@ -130,5 +165,5 @@ export function Navbar() {
         </div>
       )}
     </nav>
-  )
+  );
 }
